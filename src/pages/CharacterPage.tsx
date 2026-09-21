@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
 import { Check, ExternalLink, Heart, MapPin, Sparkles, Swords } from 'lucide-react';
 import { fetchAggregatedCharacter } from '../api/aggregator';
-import { assetKey, characterImageSources, elementImageSources, entityImageSources, genshinBuildsImage } from '../api/genshinDev';
+import { assetKey, characterImageSources, elementImageSources, entityImageSources, fetchGenshinBuildsAssetMap, findGenshinBuildsAsset, genshinBuildsImage } from '../api/genshinDev';
 import { fetchEntity } from '../api/genshinDb';
 import { fetchPlayerGuide, type LivePlayerGuide } from '../api/playerGuide';
 import { AsyncImage } from '../components/AsyncImage';
@@ -26,13 +26,18 @@ function sourceLinksForGuide(guide?: CharacterGuide) {
 
 function catalogName(value: string): string {
   return value
+    // Guides often annotate weapons with their refinement, e.g. "Favonius Sword (R5)"
+    // or "Favonius Sword R5 100%". Those annotations are not part of the catalog name.
+    .replace(/\s*(?:\(\s*R\s*\d+\s*\)|(?:\+\s*)?R\s*\d+)(?:\s+\d+(?:\.\d+)?%)?\s*$/i, '')
     .replace(/\s+(?:[24](?:-piece)?(?:\s*\+\s*[24](?:-piece)?)?|R\d+)\s*$/i, '')
     .trim();
 }
 
-function recommendationImageSources(folder: 'weapons' | 'artifacts', name: string, entity?: LibraryEntity): string[] {
+function recommendationImageSources(folder: 'weapons' | 'artifacts', name: string, entity?: LibraryEntity, catalogImage?: string): string[] {
   const cleanName = catalogName(name);
-  return [genshinBuildsImage(folder, cleanName), ...entityImageSources(folder, entity ?? { name: cleanName, icon: '', raw: {} })];
+  // The asset index powers the library page. Prefer its verified filename here too,
+  // rather than guessing a filename from a guide's display label.
+  return [catalogImage, genshinBuildsImage(folder, cleanName), ...entityImageSources(folder, entity ?? { name: cleanName, icon: '', raw: {} })].filter(Boolean) as string[];
 }
 
 function RecommendationCard({ title, badge, note, imageSources, onClick, folder }: { title: string; badge: string; note: string; imageSources?: string[]; onClick?: () => void; folder: 'weapons' | 'artifacts' }) {
@@ -59,6 +64,8 @@ export function CharacterPage() {
   const [liveGuide, setLiveGuide] = useState<LivePlayerGuide | null>(null);
   const [weaponEntities, setWeaponEntities] = useState<Record<string, LibraryEntity>>({});
   const [artifactEntities, setArtifactEntities] = useState<Record<string, LibraryEntity>>({});
+  const [weaponAssets, setWeaponAssets] = useState<Record<string, string>>({});
+  const [artifactAssets, setArtifactAssets] = useState<Record<string, string>>({});
   const [selectedRecommendation, setSelectedRecommendation] = useState<LibraryEntity | null>(null);
 
   useEffect(() => {
@@ -70,6 +77,8 @@ export function CharacterPage() {
     setLiveGuide(null);
     setWeaponEntities({});
     setArtifactEntities({});
+    setWeaponAssets({});
+    setArtifactAssets({});
     setFavorite(localStorage.getItem(`favorite:${id}`) === '1');
 
     fetchAggregatedCharacter(id, controller.signal)
@@ -93,15 +102,21 @@ export function CharacterPage() {
     if (!liveGuide) return;
     const controller = new AbortController();
     const load = async () => {
-      const weaponEntries = await Promise.all(liveGuide.weapons.map(async (item) => {
+      const [weaponEntries, artifactEntries, weaponAssetMap, artifactAssetMap] = await Promise.all([
+        Promise.all(liveGuide.weapons.map(async (item) => {
         try { return [item.name, await fetchEntity('weapons', catalogName(item.name), controller.signal)] as const; } catch { return null; }
-      }));
-      const artifactEntries = await Promise.all(liveGuide.artifacts.map(async (item) => {
+        })),
+        Promise.all(liveGuide.artifacts.map(async (item) => {
         try { return [item.set, await fetchEntity('artifacts', catalogName(item.set), controller.signal)] as const; } catch { return null; }
-      }));
+        })),
+        fetchGenshinBuildsAssetMap('weapons', controller.signal).catch(() => ({})),
+        fetchGenshinBuildsAssetMap('artifacts', controller.signal).catch(() => ({})),
+      ]);
       if (controller.signal.aborted) return;
       setWeaponEntities(Object.fromEntries(weaponEntries.filter((entry): entry is readonly [string, LibraryEntity] => Boolean(entry))));
       setArtifactEntities(Object.fromEntries(artifactEntries.filter((entry): entry is readonly [string, LibraryEntity] => Boolean(entry))));
+      setWeaponAssets(weaponAssetMap);
+      setArtifactAssets(artifactAssetMap);
     };
     load();
     return () => controller.abort();
@@ -173,7 +188,7 @@ export function CharacterPage() {
 
           <div className="player-section-heading"><div><div className="eyebrow">ARTIFACTS</div><h3>Recommended artifact sets</h3></div></div>
           <div className="recommend-grid player-recommend-grid">
-            {guide.artifacts.length ? guide.artifacts.map((artifact) => <RecommendationCard key={`${artifact.set}-${artifact.pieces}`} folder="artifacts" title={artifact.set} badge={artifact.pieces} note={artifact.note} imageSources={recommendationImageSources('artifacts', artifact.set, artifactEntities[artifact.set])} onClick={artifactEntities[artifact.set] ? () => setSelectedRecommendation(artifactEntities[artifact.set]) : undefined} />) : <div className="player-empty"><strong>Artifact recommendations were not returned.</strong><p>The character facts are still available; the page will not invent a build.</p></div>}
+            {guide.artifacts.length ? guide.artifacts.map((artifact) => <RecommendationCard key={`${artifact.set}-${artifact.pieces}`} folder="artifacts" title={artifact.set} badge={artifact.pieces} note={artifact.note} imageSources={recommendationImageSources('artifacts', artifact.set, artifactEntities[artifact.set], findGenshinBuildsAsset(artifactAssets, catalogName(artifact.set)))} onClick={artifactEntities[artifact.set] ? () => setSelectedRecommendation(artifactEntities[artifact.set]) : undefined} />) : <div className="player-empty"><strong>Artifact recommendations were not returned.</strong><p>The character facts are still available; the page will not invent a build.</p></div>}
           </div>
 
           <div className="main-stat-card">
@@ -184,7 +199,7 @@ export function CharacterPage() {
 
           <div className="player-section-heading"><div><div className="eyebrow">WEAPONS</div><h3>Recommended weapons</h3></div></div>
           <div className="recommend-grid player-recommend-grid">
-            {guide.weapons.length ? guide.weapons.map((weapon) => <RecommendationCard key={weapon.name} folder="weapons" title={weapon.name} badge={weapon.tier} note={weapon.note} imageSources={recommendationImageSources('weapons', weapon.name, weaponEntities[weapon.name])} onClick={weaponEntities[weapon.name] ? () => setSelectedRecommendation(weaponEntities[weapon.name]) : undefined} />) : <div className="player-empty"><strong>Weapon recommendations were not returned.</strong><p>The character facts are still available; the page will not invent a build.</p></div>}
+            {guide.weapons.length ? guide.weapons.map((weapon) => <RecommendationCard key={weapon.name} folder="weapons" title={weapon.name} badge={weapon.tier} note={weapon.note} imageSources={recommendationImageSources('weapons', weapon.name, weaponEntities[weapon.name], findGenshinBuildsAsset(weaponAssets, catalogName(weapon.name)))} onClick={weaponEntities[weapon.name] ? () => setSelectedRecommendation(weaponEntities[weapon.name]) : undefined} />) : <div className="player-empty"><strong>Weapon recommendations were not returned.</strong><p>The character facts are still available; the page will not invent a build.</p></div>}
           </div>
         </> : <div className="player-empty"><Sparkles size={20} /><div><strong>{guideLoading ? 'Loading the latest player build information…' : 'No public build source is currently available.'}</strong><p>{guideLoading ? 'Teyvat Atlas is checking multiple public build sources for this character.' : 'The live game data, skills, constellations and materials are still available on this page.'}</p></div></div>}
       </section>
