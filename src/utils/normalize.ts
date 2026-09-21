@@ -53,6 +53,7 @@ export function normalizeCharacter(payload: unknown, idHint = ''): GenshinCharac
       card: firstString(images.card, images.cardImage, images.gachaCard) ?? '',
       icon: firstString(images.icon, images.iconImage) ?? '',
       portrait: firstString(images.portrait, images.character) ?? '',
+      gacha: firstString(images.gacha, images.gachaCard) ?? '',
     },
     raw,
   };

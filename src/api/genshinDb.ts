@@ -2,7 +2,7 @@ import { getJson } from './http';
 import { normalizeCharacter, normalizeEntity, unwrapResult, asArray } from '../utils/normalize';
 import type { GenshinCharacter, LibraryEntity } from '../types/genshin';
 
-const BASE_URL = import.meta.env.VITE_GENSHIN_DB_API ?? 'https://genshin-db-api.vercel.app/api/v5';
+const BASE_URL = import.meta.env.VITE_GENSHIN_DB_API ?? '/api/genshin-db';
 
 function queryUrl(folder: string, query: string, extra: Record<string, string> = {}): string {
   const params = new URLSearchParams({ query, resultLanguage: 'english', ...extra });

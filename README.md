@@ -1,59 +1,17 @@
 # Teyvat Atlas
 
-A React + TypeScript, client-only Genshin Impact reference app for Netlify or Render.
+Teyvat Atlas is a player-first Genshin Impact companion. Character pages combine live game data with current player build data so players can see character information, recommended weapons, artifacts, stats, teams, talents, constellations and materials in one place.
 
-## What it does
+## Data model
 
-- Live playable-character index from GenshinDB.
-- Character detail aggregation from GenshinDB + genshin.dev image/entity endpoints.
-- Base-stat table from the GenshinDB stats endpoint.
-- Talent, constellation and material extraction with schema-tolerant normalization.
-- Weapon and artifact live libraries.
-- Interactive four-slot team builder with local saves.
-- Character material planner with local checklists.
-- Public UID/build lookup through Enka.Network.
-- Full community map embed plus a local progress tracker.
-- FAQ and external community guide hub.
-- Local cache, favorites and progress via browser localStorage.
-- Netlify SPA rewrite and Render static hosting configuration.
+- **GenshinDB API** supplies structured game data and the live character index.
+- **genshin.dev** supplies additional entity data and image assets.
+- **Genshin.gg** is read server-side for current character builds, recommended weapons, artifact sets, main stats, substats, team archetypes and upgrade-material references.
+- **Prydwen** is a server-side fallback for character build/reference data when a Genshin.gg page is unavailable.
+- **KeqingMains** remains a player-facing theorycrafting reference source and is linked from character pages.
+- **Enka.Network** remains available for public UID/showcase lookups.
 
-## Data-source boundary
-
-This project does not scrape arbitrary guide sites in the browser. Structured public APIs are used where they are intended for programmatic access; theorycrafting sites are linked as sources. This keeps the app reliable under browser CORS rules and makes source attribution explicit.
-
-Primary structured providers:
-- https://genshin-db-api.vercel.app/
-- https://genshin.jmp.blue/
-- https://enka.network/
-
-Community references:
-- https://keqingmains.com/
-- https://www.prydwen.gg/genshin/
-- https://gensh.honeyhunterworld.com/
-- https://genshin-impact.fandom.com/wiki/Genshin_Impact_Wiki
-- https://genshinmap.github.io/
-
-## Environment variables
-
-Copy `.env.example` to `.env` only when overriding provider endpoints is necessary:
-
-- `VITE_GENSHIN_DB_API`
-- `VITE_GENSHIN_IMAGES_API`
-- `VITE_ENKA_API`
-
-## Deploy
-
-### Netlify
-
-Build command: `npm run build`
-
-Publish directory: `dist`
-
-The included `netlify.toml` rewrites all SPA routes to `index.html`.
-
-### Render
-
-Use the included `render.yaml` as a static-site definition.
+The source pages are cached on the Teyvat Atlas server. The cache expires automatically, so the app does not require a hand-maintained build entry for every character.
 
 ## Development
 
@@ -62,6 +20,39 @@ npm install
 npm run dev
 ```
 
-## Important
+The Vite development server is used for frontend work. The live server-side source aggregator is enabled in the deployed Render service.
 
-This is an unofficial fan-made tool. Genshin Impact and its assets remain the property of their respective owners. Provider availability can change independently of this project.
+## Production / Render
+
+This project is deployed as a **Node web service**, not a Render Static Site, because the player build data is fetched server-side to avoid browser CORS restrictions and to keep scraping/source logic out of the player UI.
+
+```text
+Build command: npm install && npm run build
+Start command: npm start
+```
+
+The Node server serves `dist/` and exposes:
+
+```text
+GET /api/health
+GET /api/player/guide?slug=albedo
+```
+
+The React application falls back to the existing structured game-data sources if the player guide endpoint is temporarily unavailable.
+
+## Player experience
+
+A character page is intended to answer the practical questions a player has:
+
+- What does this character do?
+- What role do they fill?
+- Which weapons should I consider?
+- Which artifact sets should I use?
+- What main stats and substats should I target?
+- Which teams use this character?
+- Which talents matter most?
+- What are the character's skills and constellations?
+- What materials are needed for leveling?
+- Where did the displayed recommendation come from?
+
+Raw provider payloads and developer-oriented API diagnostics are not part of the normal player experience.
