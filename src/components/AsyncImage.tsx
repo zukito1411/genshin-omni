@@ -1,0 +1,2 @@
+import { useState } from 'react';
+export function AsyncImage({ src, alt, className, fallback }: { src:string; alt:string; className?:string; fallback?:string }) { const [failed,setFailed]=useState(false); if (failed || !src) return <div className={`${className ?? ''} image-fallback`} aria-label={alt}>{fallback ?? alt.slice(0,1)}</div>; return <img src={src} alt={alt} className={className} loading="lazy" onError={()=>setFailed(true)} />; }
