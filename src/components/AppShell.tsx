@@ -1,5 +1,5 @@
 import { NavLink, Outlet, useNavigate } from 'react-router-dom';
-import { BookOpen, Boxes, Compass, Gem, Home, Map, Search, Shield, Sparkles, Swords, Users, UserRound } from 'lucide-react';
+import { BookOpen, Boxes, Compass, Home, Search, Shield, Sparkles, Swords, Users } from 'lucide-react';
 import { useState, type FormEvent } from 'react';
 import { useCharacters } from '../hooks/useCharacters';
 import { clearAppCache } from '../api/cache';
@@ -10,10 +10,7 @@ const nav = [
   { to: '/weapons', label: 'Weapons', icon: Swords },
   { to: '/artifacts', label: 'Artifacts', icon: Boxes },
   { to: '/teams', label: 'Team Builder', icon: Shield },
-  { to: '/materials', label: 'Material Planner', icon: Gem },
-  { to: '/map', label: 'Interactive Map', icon: Map },
   { to: '/guides', label: 'Guides / FAQ', icon: BookOpen },
-  { to: '/account', label: 'UID Build Lookup', icon: UserRound },
 ];
 
 export function AppShell() {

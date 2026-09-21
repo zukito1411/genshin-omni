@@ -5,45 +5,62 @@ const candidate = (obj: Record<string, any>, keys: string[]) => keys.map((key) =
 
 export function extractTalents(raw: Record<string, unknown>): TalentEntry[] {
   const root = asRecord(raw);
-  const values = asArray(candidate(root, ['talents', 'skills', 'abilities', 'talent']));
+  // Never merge arbitrary provider objects: some catalogue responses expose
+  // numbered shells that look like talents but have no game description.
+  const active = asArray(root.skillTalents).length ? asArray(root.skillTalents) : asArray(root.talents);
+  const passive = asArray(root.passiveTalents);
+  const values = [...active, ...passive];
+  const seen = new Set<string>();
   return values.map((item, index) => {
     const obj = asRecord(item);
+    const name = firstString(obj.name, obj.title);
+    const description = firstString(obj.description, obj.desc, obj.detail, obj.effect, obj.descriptionText);
     return {
-      name: firstString(obj.name, obj.title, obj.type, `Talent ${index + 1}`) ?? `Talent ${index + 1}`,
-      type: firstString(obj.type, obj.levelType, obj.kind),
-      description: firstString(obj.description, obj.desc, obj.detail, obj.effect),
+      name: name ?? '',
+      type: firstString(obj.unlock, obj.type, obj.levelType, obj.kind),
+      description,
       icon: firstString(obj.icon, asRecord(obj.images).icon),
       level: Number(obj.level ?? index + 1) || index + 1,
       raw: obj,
     } satisfies TalentEntry;
-  }).filter((entry) => entry.name);
+  }).filter((entry) => entry.name && entry.description && !seen.has(entry.name.toLowerCase()) && Boolean(seen.add(entry.name.toLowerCase())));
 }
 
 export function extractConstellations(raw: Record<string, unknown>): ConstellationEntry[] {
   const root = asRecord(raw);
-  const values = asArray(candidate(root, ['constellations', 'constellation']));
+  const values = asArray(candidate(root, ['constellations', 'constellationTalents', 'constellation']));
   return values.map((item, index) => {
     const obj = asRecord(item);
+    const name = firstString(obj.name, obj.title);
+    const description = firstString(obj.description, obj.desc, obj.effect, obj.descriptionText);
     return {
-      name: firstString(obj.name, obj.title, `C${index + 1}`) ?? `C${index + 1}`,
-      description: firstString(obj.description, obj.desc, obj.effect),
+      name: name ?? '',
+      description,
       level: Number(obj.level ?? index + 1) || index + 1,
       icon: firstString(obj.icon, asRecord(obj.images).icon),
     } satisfies ConstellationEntry;
-  });
+  }).filter((entry) => entry.name && entry.description && entry.level && entry.level <= 6)
+    .sort((a, b) => (a.level ?? 0) - (b.level ?? 0));
 }
 
-function materialFromObject(value: unknown): MaterialRef | null {
+function materialFromObject(value: unknown, category?: string): MaterialRef | null {
   const obj = asRecord(value);
   const name = firstString(obj.name, obj.itemName, obj.material, obj.displayName, obj.label);
   if (!name) return null;
-  const amountRaw = obj.amount ?? obj.quantity ?? obj.count;
-  const hasMaterialShape = amountRaw !== undefined || obj.material !== undefined || obj.itemName !== undefined;
-  if (!hasMaterialShape) return null;
+
+  // Genshin.jmp.blue uses { name, value } for ascension costs, whereas its
+  // talent data also uses that same shape for combat-stat rows (for example
+  // "1-Hit DMG: 44.5%"). Only an ascension record may use a bare `value`.
+  // GenshinDB material records use explicit amount/quantity/count fields.
+  const amountRaw = obj.amount ?? obj.quantity ?? obj.count ?? obj.value;
   const amount = typeof amountRaw === 'number' ? amountRaw : Number(amountRaw);
+  const hasExplicitMaterialShape = obj.amount !== undefined || obj.quantity !== undefined || obj.count !== undefined || obj.material !== undefined || obj.itemName !== undefined;
+  const hasAscensionValue = obj.value !== undefined && category === 'Ascension';
+  if ((!hasExplicitMaterialShape && !hasAscensionValue) || !Number.isFinite(amount) || amount <= 0) return null;
+
   return {
     name,
-    amount: Number.isFinite(amount) && amount > 0 ? amount : undefined,
+    amount,
     icon: firstString(obj.icon, asRecord(obj.images).icon, obj.iconPath),
     source: firstString(obj.source, obj.obtain, obj.obtainMethod),
     category: firstString(obj.category, obj.type),
@@ -69,7 +86,7 @@ export function extractMaterials(raw: Record<string, unknown>): MaterialRef[] {
     if (depth > 10 || totals.size >= 160) return;
 
     if (Array.isArray(value)) {
-      value.forEach((item) => visit(item, depth + 1, context));
+      value.forEach((item) => visit(item, depth + 1, context, inheritedCategory));
       return;
     }
 
@@ -77,12 +94,16 @@ export function extractMaterials(raw: Record<string, unknown>): MaterialRef[] {
     const obj = value as Record<string, unknown>;
     const category = /talent/i.test(context) ? 'Talent' : /ascension/i.test(context) ? 'Ascension' : inheritedCategory;
 
-    const direct = materialFromObject(obj);
+    const direct = materialFromObject(obj, category);
     if (direct) add({ ...direct, category: direct.category ?? category });
 
-    const materialContext = /cost|material|ascension|talent|items|item|upgrade/i.test(context);
+    // Talent objects contain numeric combat attributes and upgrade tables. They
+    // are not material lists, so only descend through explicit material/cost
+    // containers. This prevents skill rows such as "1-Hit DMG" from leaking
+    // into the leveling checklist.
+    const materialContext = /cost|material|ascension|items|item/i.test(context);
     Object.entries(obj).forEach(([key, child]) => {
-      const isTechnical = /^(level|rank|id|type|category|name|description|source|obtain|amount|quantity|count)$/i.test(key);
+      const isTechnical = /^(level|rank|id|type|category|name|description|source|obtain|amount|quantity|count|value)$/i.test(key);
       if (materialContext && !isTechnical) {
         if (typeof child === 'number' && Number.isFinite(child) && child > 0) {
           add({ name: key, amount: child, category });
@@ -94,7 +115,7 @@ export function extractMaterials(raw: Record<string, unknown>): MaterialRef[] {
           return;
         }
       }
-      if (child && typeof child === 'object' && (/cost|material|ascension|talent|items|item|upgrade/i.test(key) || materialContext)) {
+      if (child && typeof child === 'object' && (/cost|material|ascension|items|item/i.test(key) || materialContext)) {
         const nextCategory = /talent/i.test(key) ? 'Talent' : /ascension/i.test(key) ? 'Ascension' : category;
         visit(child, depth + 1, key, nextCategory);
       }
@@ -107,7 +128,9 @@ export function extractMaterials(raw: Record<string, unknown>): MaterialRef[] {
 
 export function baseStatRows(stats: Record<string, unknown>): Array<Record<string, unknown>> {
   const map = stats && typeof stats === 'object' ? stats : {};
-  return Object.entries(map).map(([level, row]) => ({ level, ...(asRecord(row)) })).filter((row) => ['20', '20+', '40', '40+', '50', '50+', '60', '60+', '70', '70+', '80', '80+', '90'].includes(String(row.level)));
+  // Show the standard level milestones only. Post-ascension `20+` etc. are
+  // useful for calculation tools but duplicate this player-facing overview.
+  return Object.entries(map).map(([level, row]) => ({ ...asRecord(row), level })).filter((row) => ['20', '40', '50', '60', '70', '80', '90'].includes(String(row.level)));
 }
 
 export function formatValue(value: unknown): string {

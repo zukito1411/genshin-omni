@@ -15,6 +15,10 @@ function providerCharacterQuery(query: string): string {
 }
 
 async function enrichCharacterAsset(character: GenshinCharacter, signal?: AbortSignal): Promise<GenshinCharacter> {
+  // GenshinDB already gives detailed records their official card/portrait.
+  // Do not delay opening the character page behind a scraped asset index when
+  // usable artwork is already present.
+  if (character.images.image || character.images.card || character.images.portrait || character.images.icon) return character;
   const assets = await fetchGenshinBuildsAssetMap('characters', signal).catch(() => ({}) as Record<string, string>);
   const image = findGenshinBuildsAsset(assets, character.name);
   return image ? { ...character, images: { ...character.images, image } } : character;
@@ -82,7 +86,8 @@ export async function fetchFolderEntities(folder: string, signal?: AbortSignal):
 export async function fetchEntity(folder: string, query: string, signal?: AbortSignal): Promise<LibraryEntity> {
   const payload = await getJson<unknown>(queryUrl(folder, query, { matchNames: 'true', matchAltNames: 'true', matchAliases: 'true' }), signal, { cacheKey: `${folder}:v7:${query.toLowerCase()}`, ttlMs: 6 * 60 * 60 * 1000 });
   const entity = normalizeEntity(payload, query);
-  const assets = await fetchGenshinBuildsAssetMap(folder as 'weapons' | 'artifacts', signal).catch(() => ({}) as Record<string, string>);
+  const assetFolder = folder === 'weapons' || folder === 'artifacts' ? folder : null;
+  const assets = assetFolder ? await fetchGenshinBuildsAssetMap(assetFolder, signal).catch(() => ({}) as Record<string, string>) : {};
   const image = findGenshinBuildsAsset(assets, entity.name);
   return image ? { ...entity, icon: image } : entity;
 }

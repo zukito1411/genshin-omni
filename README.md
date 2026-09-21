@@ -11,7 +11,7 @@ Teyvat Atlas is a player-first Genshin Impact companion built as a **React + Typ
 - **Genshin Builds** — secondary public player build reference.
 - **Genshin Build** — additional public build reference used when primary build sources do not provide enough data.
 - **KeqingMains** — theorycrafting reference and fallback guide source.
-- **AppSample Genshin Impact Map** — live embedded searchable world map.
+- **Community marker dataset** — live marker data rendered in the in-app searchable map, with MapGenie linked for its full external map experience.
 - **Enka.Network** — optional UID build lookup.
 
 Build pages are fetched on demand through the public Jina Reader service so the application can remain frontend-only. Successful results are cached locally in the browser.

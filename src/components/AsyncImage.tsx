@@ -17,7 +17,10 @@ export function AsyncImage({ src, alt, className, fallback, assetKey }: AsyncIma
   const storageKey = assetKey ? `teyvat-atlas:asset:v2:${assetKey}` : '';
   const persisted = storageKey ? localStorage.getItem(storageKey) : null;
   const remembered = (assetKey && successfulSources.get(assetKey)) || persisted || successfulSources.get(sourceKey);
-  const sources = remembered ? [remembered, ...sourceList.filter((value) => value !== remembered)] : sourceList;
+  // Always retry the caller's current first choice. A guide may initially give
+  // us a guessed URL, then later resolve a verified catalog asset for the same
+  // item; the older remembered URL must not prevent that upgrade.
+  const sources = [...new Set([sourceList[0], remembered, ...sourceList].filter((value): value is string => Boolean(value)))];
   const [index, setIndex] = useState(0);
 
   useEffect(() => setIndex(0), [assetKey, sourceKey]);

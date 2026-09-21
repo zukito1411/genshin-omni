@@ -6,5 +6,6 @@ export const sources = [
  {name:'KeqingMains',url:'https://keqingmains.com/',purpose:'Detailed community theorycrafting reference linked from player build pages.'},
  {name:'Prydwen',url:'https://www.prydwen.gg/genshin/',purpose:'Additional community build and character reference.'},
  {name:'Enka.Network',url:'https://enka.network/',purpose:'Optional public UID showcase/build lookup.'},
- {name:'Genshin Impact Interactive Map',url:'https://genshin-impact-map.appsample.com/',purpose:'Live searchable world map with resources, locations and exploration markers.'},
+ {name:'Genshin Community Marker Data',url:'https://game-data.lemonapi.com/gim/markers_all.v5.json',purpose:'Public marker data loaded directly into the in-app exploration map.'},
+ {name:'MapGenie Genshin Impact Map',url:'https://mapgenie.io/genshin-impact/maps/teyvat',purpose:'Full external interactive map reference for detailed exploration.'},
 ];

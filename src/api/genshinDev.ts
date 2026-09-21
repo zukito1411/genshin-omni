@@ -26,16 +26,16 @@ function withExtension(value: string, extension: string): string {
   return /\.[a-z0-9]+$/i.test(value) ? value : `${value}${extension}`;
 }
 
-function cdnCandidates(filename?: string, assetType: 'characters' | 'weapons' | 'artifacts' = 'characters'): string[] {
+function cdnCandidates(filename?: string, assetType: 'characters' | 'weapons' | 'artifacts' | 'materials' = 'characters'): string[] {
   if (!filename) return [];
   const file = withExtension(filename, '.png');
   const mihoyoFolder = assetType === 'characters' ? 'character_icon' : 'equip';
   return unique([
-    `https://upload-os-bbs.mihoyo.com/game_record/genshin/${mihoyoFolder}/${encodeURIComponent(file)}`,
-    `${ENKA_UI}${encodeURIComponent(file)}`,
-    `${HAKUSH_UI}${encodeURIComponent(withExtension(filename, '.webp'))}`,
-    `${YATTA_UI}${encodeURIComponent(withExtension(filename, '.png'))}`,
     `${AMBR_UI}${encodeURIComponent(file)}`,
+    `${YATTA_UI}${encodeURIComponent(withExtension(filename, '.png'))}`,
+    `${HAKUSH_UI}${encodeURIComponent(withExtension(filename, '.webp'))}`,
+    `${ENKA_UI}${encodeURIComponent(file)}`,
+    `https://upload-os-bbs.mihoyo.com/game_record/genshin/${mihoyoFolder}/${encodeURIComponent(file)}`,
     `${WIKI_FILE}${encodeURIComponent(file)}`,
   ]);
 }
@@ -85,13 +85,21 @@ export function genshinBuildsImage(folder: 'characters' | 'weapons' | 'artifacts
   return `https://i2.wp.com/images.genshin-builds.com/genshin/${folder}/${path}?strip=all&quality=100&w=512`;
 }
 
+export function genshinBuildsMaterialImage(name: string): string {
+  const filename = encodeURIComponent(slugify(name).replace(/-/g, '_'));
+  return `https://i2.wp.com/images.genshin-builds.com/genshin/materials/${filename}.png?strip=all&quality=100&w=64`;
+}
+
 export function fetchGenshinBuildsAssetMap(folder: 'characters' | 'weapons' | 'artifacts', signal?: AbortSignal): Promise<Record<string, string>> {
   const cached = assetMaps.get(folder);
   if (cached) return Promise.resolve(cached);
   const pending = assetMapRequests.get(folder);
   if (pending) return pending;
 
-  const request = loadGenshinBuildsAssetMap(folder, signal)
+  // This index is shared by all library and detail pages. Do not let one
+  // navigated-away page abort the single request every other page depends on.
+  void signal;
+  const request = loadGenshinBuildsAssetMap(folder)
     .then((assets) => { assetMaps.set(folder, assets); return assets; })
     .finally(() => assetMapRequests.delete(folder));
   assetMapRequests.set(folder, request);
@@ -122,7 +130,27 @@ async function loadGenshinBuildsAssetMap(folder: 'characters' | 'weapons' | 'art
 
 export function findGenshinBuildsAsset(assets: Record<string, string>, name: string): string | undefined {
   const key = slugify(name);
-  return assets[key] ?? assets[key.replace(/-/g, '')];
+  const exact = assets[key] ?? assets[key.replace(/-/g, '')];
+  if (exact) return exact;
+
+  // Build sources often append refinement levels or stat advice, for example
+  // "Aquila Favonia Physical DMG Bonus". Match the complete asset name within
+  // that longer display label instead of requiring an exact string match.
+  const ignoredTokens = new Set(['atk', 'def', 'hp', 'crit', 'rate', 'dmg', 'damage', 'bonus', 'physical', 'elemental', 'mastery', 'energy', 'recharge', 'healing', 'pyro', 'hydro', 'electro', 'cryo', 'anemo', 'geo', 'dendro', 'piece', 'pieces', 'choose', 'pick', 'option', 'refined', 'refinement']);
+  const queryTokens = new Set(key.split('-').filter((token) => token.length > 1 && !ignoredTokens.has(token) && !/^r\d+$/.test(token)));
+  if (!queryTokens.size) return undefined;
+
+  let match: { url: string; score: number } | undefined;
+  for (const [assetKey, url] of Object.entries(assets)) {
+    // The asset map stores a compact duplicate key for each entry. Only score
+    // the readable slug so the same image does not compete with itself.
+    if (!assetKey.includes('-')) continue;
+    const assetTokens = assetKey.split('-').filter((token) => token.length > 1);
+    if (!assetTokens.length || !assetTokens.every((token) => queryTokens.has(token))) continue;
+    const score = assetTokens.length * 100 - Math.max(0, queryTokens.size - assetTokens.length);
+    if (!match || score > match.score) match = { url, score };
+  }
+  return match?.url;
 }
 
 export function entityImage(type: string, id: string, imageType = 'icon') {
@@ -196,14 +224,14 @@ export function entityImageSources(type: string, entity: Pick<LibraryEntity, 'na
 
   const entityImages = type === 'artifacts'
     ? ['flower-of-life', 'plume-of-death', 'sands-of-eon', 'goblet-of-eonothem', 'circlet-of-logos'].map((imageType) => entityImage(type, entity.name, imageType))
-    : [entityImage(type, entity.name, kind)];
+    : type === 'weapons' ? [entityImage(type, entity.name, kind)] : [];
 
   return unique([
     ...directImage(entity.icon),
-    genshinBuildsImage(type as 'weapons' | 'artifacts', entity.name),
+    ...(type === 'weapons' || type === 'artifacts' ? [genshinBuildsImage(type, entity.name)] : []),
     ...rawImages,
     ...entityImages,
-    ...filenameCandidates.flatMap((filename) => cdnCandidates(filename, type as 'weapons' | 'artifacts')),
+    ...filenameCandidates.flatMap((filename) => cdnCandidates(filename, type as 'characters' | 'weapons' | 'artifacts' | 'materials')),
     ...entityIconCdnSources(type, entity.name),
   ]);
 }

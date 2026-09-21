@@ -1,5 +1,5 @@
 import { Link } from 'react-router-dom';
-import { ArrowRight, BookOpen, Boxes, Compass, Gem, Map, Swords, Users, Sparkles } from 'lucide-react';
+import { ArrowRight, BookOpen, Boxes, Compass, Swords, Users, Sparkles } from 'lucide-react';
 import { SectionTitle } from '../components/SectionTitle';
 import { AsyncImage } from '../components/AsyncImage';
 import { assetKey, characterImageSources } from '../api/genshinDev';
@@ -42,13 +42,11 @@ export function DashboardPage() {
 
     <section className="section-block home-tools">
       <SectionTitle eyebrow="THE ADVENTURER'S HANDBOOK" title="Everything you need before you set out." description="Built around the things a player actually wants to know: what to build, what to farm, who to pair, and where to go next." />
-      <div className="feature-grid six">
+      <div className="feature-grid four">
         <Link to="/characters" className="feature-card feature-card--character"><Users /><h3>Characters</h3><p>Open any character and see their full player guide, build, materials and team options.</p><span>Open archive <ArrowRight size={13} /></span></Link>
         <Link to="/weapons" className="feature-card feature-card--weapon"><Swords /><h3>Weapons</h3><p>Compare weapons, stats and usable options for the characters you own.</p><span>Browse weapons <ArrowRight size={13} /></span></Link>
         <Link to="/artifacts" className="feature-card feature-card--artifact"><Boxes /><h3>Artifacts</h3><p>Browse sets, bonuses and the characters that can put them to work.</p><span>Browse sets <ArrowRight size={13} /></span></Link>
-        <Link to="/materials" className="feature-card feature-card--material"><Gem /><h3>Material Planner</h3><p>Turn character and talent requirements into a checklist you can actually farm.</p><span>Plan a build <ArrowRight size={13} /></span></Link>
         <Link to="/teams" className="feature-card feature-card--team"><BookOpen /><h3>Team Builder</h3><p>Assemble four-character squads and keep your favorite compositions on this device.</p><span>Forge a team <ArrowRight size={13} /></span></Link>
-        <Link to="/map" className="feature-card feature-card--map"><Map /><h3>World Map</h3><p>Find specialties, bosses, chests and farming locations while you explore Teyvat.</p><span>Open the map <ArrowRight size={13} /></span></Link>
       </div>
     </section>
 
@@ -65,6 +63,6 @@ export function DashboardPage() {
       </section>
     </section>
 
-    <section className="callout home-callout"><div><div className="eyebrow">ADVENTURE READY</div><h3>Stop jumping between tabs. Keep your build, farming and exploration notes together.</h3><p>Open a character, follow their build, add the materials to your planner, then take the route to the map.</p></div><Link className="button secondary" to="/characters">Start with a character <ArrowRight size={14} /></Link></section>
+    <section className="callout home-callout"><div><div className="eyebrow">ADVENTURE READY</div><h3>Stop jumping between tabs. Keep your builds, teams and character notes together.</h3><p>Open a character, follow their build, review their materials, then save the team you want to try.</p></div><Link className="button secondary" to="/characters">Start with a character <ArrowRight size={14} /></Link></section>
   </div>;
 }

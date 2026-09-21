@@ -15,22 +15,19 @@ interface ParsedSourceGuide extends LivePlayerGuide {
   quality: number;
 }
 
-const CACHE_TTL = 12 * 60 * 60 * 1000;
+const CACHE_TTL = 24 * 60 * 60 * 1000;
 const STALE_REVALIDATE_TTL = 7 * 24 * 60 * 60 * 1000;
 const SOURCE_TIMEOUT_MS = 10 * 1000;
 const guideRefreshes = new Map<string, Promise<LivePlayerGuide>>();
+const guideMemory = new Map<string, { value: LivePlayerGuide; expiresAt: number }>();
 
 const SOURCES = {
   genshinBuilds: (slug: string) => `https://genshin-builds.com/en/character/${slug.replace(/-/g, '_')}`,
   icyVeins: (slug: string) => `https://www.icy-veins.com/genshin-impact/${slug}-guide-best-builds`,
-  game8Search: (slug: string) => `https://game8.co/games/Genshin-Impact/archives?search=${encodeURIComponent(slug.replace(/-/g, ' '))}`,
-  kqm: (slug: string) => `https://keqingmains.com/q/${slug}-quickguide/`,
 };
 
 const STRUCTURAL = /^(?:best|recommended|build|weapons?|artifacts?|stats?|teams?|talents?|constellations?|passives?|materials?|ascension|characters?|skills?|guides?|related guides?|show more|show less|list of contents|image|button|table of contents|author|changelog|published|last updated|f2p option|all recommended weapons|all artifacts|all teams)$/i;
 const SOURCE_JUNK = /^(?:url source|published time|markdown content|home|characters|skills|9 ranked|\d+ ranked|version \d+(?:\.\d+)*|source|source url|markdown)$/i;
-const STAT_TOKENS = /^(?:HP|ATK|DEF|CRIT|CRIT Rate|CRIT DMG|Energy Recharge|Elemental Mastery|Healing Bonus|Pyro DMG|Cryo DMG|Hydro DMG|Electro DMG|Dendro DMG|Geo DMG|Anemo DMG|Physical DMG|ATK%|DEF%|HP%)$/i;
-const WEAPON_STATS = /\b(?:ATK|DEF|CRIT Rate|CRIT DMG|Energy Recharge|Elemental Mastery|HP)\s*(?:%|Bonus)?\b/i;
 const ROLE_PATTERN = /\b(?:main dps|main-dps|sub dps|sub-dps|off-field dps|off field dps|support|healer|buffer|driver|enabler|on-field dps|on field dps)\b/i;
 
 function clean(value: string): string {
@@ -87,6 +84,30 @@ function section(lines: string[], start: RegExp[], end: RegExp[] = []): string[]
   return lines.slice(startIndex + 1, endIndex < 0 ? lines.length : endIndex);
 }
 
+/**
+ * Keep source links until after we have identified the section. Markdown
+ * headings can change, but weapon/artifact URLs are stable publisher-owned
+ * identifiers and are safer than treating prose as an item name.
+ */
+function markdownSection(markdown: string, start: RegExp[], end: RegExp[] = []): string {
+  const lines = markdown.split(/\r?\n/);
+  const heading = (line: string) => clean(line.replace(/^\s*#{1,6}\s*/, ''));
+  const startIndex = lines.findIndex((line) => start.some((rx) => rx.test(heading(line))));
+  if (startIndex < 0) return '';
+  const endIndex = lines.findIndex((line, index) => index > startIndex && end.some((rx) => rx.test(heading(line))));
+  return lines.slice(startIndex + 1, endIndex < 0 ? lines.length : endIndex).join('\n');
+}
+
+function linkedCatalogNames(markdown: string, pathSegment: 'weapon' | 'weapons' | 'artifact' | 'artifacts', limit = 8): string[] {
+  // `![Image 14](...)` is often followed by `[Artifact Name](...)`. Match
+  // only the latter link; image alt text is never a recommendation name.
+  const matches = markdown.matchAll(new RegExp(`(?:^|[^!])\\[([^\\]\\n]{2,100})\\]\\(https?:\\/\\/[^)\\s]*\\/${pathSegment}\\/[^)\\s]+\\)`, 'gim'));
+  const names = [...matches]
+    .map((match) => normalizedName(match[1]))
+    .filter((name) => name && !STRUCTURAL.test(name) && !SOURCE_JUNK.test(name));
+  return unique(names).slice(0, limit);
+}
+
 function extractIntro(lines: string[]): string {
   const intro = lines.find((line) =>
     line.length >= 80 &&
@@ -129,36 +150,6 @@ function extractMainStats(text: string): { sands: string; goblet: string; circle
   return result;
 }
 
-function parseDelimitedNames(lines: string[], allowStats = false, limit = 8): string[] {
-  const output: string[] = [];
-  for (const line of lines) {
-    let value = normalizedName(line);
-    if (!value || STRUCTURAL.test(value) || SOURCE_JUNK.test(value)) continue;
-    if (/^(?:r\d|\d+%|option \d+|top recommendation|alternative|recommended|rank|score)$/i.test(value)) continue;
-    if (/^(?:sands|goblet|circlet|substats?|main stats?|talent priority)$/i.test(value)) continue;
-    if (WEAPON_STATS.test(value)) {
-      const stripped = value
-        .replace(/\s+R\d+\s*$/i, '')
-        .replace(/\s+(?:HP|ATK|DEF|CRIT Rate|CRIT DMG|Energy Recharge|Elemental Mastery)(?:%| Bonus)?\s*$/i, '')
-        .trim();
-      if (stripped) value = stripped;
-    }
-    if (value.includes(' | ')) {
-      const parts = value.split(' | ').map(clean).filter(Boolean);
-      const candidate = parts.find((part) => !STRUCTURAL.test(part) && !STAT_TOKENS.test(part) && part.length > 2 && part.length < 90);
-      value = candidate ?? value;
-    }
-    if (!allowStats && value.length > 90) continue;
-    if (value.length < 2 || value.length > 100) continue;
-    if (/^(?:the|this|use|when|provides|offers|grants|good|great|best|ideal|recommended)\b/i.test(value)) continue;
-    if (!allowStats && (/[%:]/.test(value) || value.length > 65 || value.split(/\s+/).length > 10)) continue;
-    if (!allowStats && /^(?:ATK|DEF|HP|EM|ER|CRIT|Passive|Normal|Elemental|When|After|Using|Increases?|Boosts?|Grants?|Deals?|Converts?)\b/i.test(value)) continue;
-    if (!output.some((item) => item.toLowerCase() === value.toLowerCase())) output.push(value);
-    if (output.length >= limit) break;
-  }
-  return output;
-}
-
 function parseGenshinBuilds(markdown: string, slug: string, url: string): ParsedSourceGuide {
   const lines = markdownLines(markdown);
   const buildHeadingIndex = lines.findIndex((line) => /builds for/i.test(line) || /build build/i.test(line) || /build for/i.test(line));
@@ -168,15 +159,17 @@ function parseGenshinBuilds(markdown: string, slug: string, url: string): Parsed
     ...(buildRole.match(/(?:Main DPS|Main-DPS|Sub-DPS|Sub DPS|Off-Field DPS|Support|Healer|Buffer)/gi) ?? []),
   ]);
 
-  const weaponsSection = section(lines, [/^Weapons$/i, /^Best Weapons/i], [/^Artifacts$/i, /^Substats Priority$/i, /^Talents Priority$/i, /^Recommended Primary Stats/i]);
-  const artifactsSection = section(lines, [/^Artifacts$/i, /^Best Artifacts/i], [/^Substats Priority$/i, /^Talents Priority$/i, /^Recommended Primary Stats/i, /^Most-used community build/i]);
   const statSection = section(lines, [/^Recommended Primary Stats/i, /^Substats Priority/i], [/^Casting .* directly/i, /^Off-Field DPS/i, /^Most-used community build/i, /^Best teams/i]);
   const teamSection = section(lines, [/^Best teams/i, /^Best teams for/i, /^Team Compositions$/i], [/^Skills$/i, /^Passive Talents$/i, /^Constellations$/i, /^Outfits$/i, /^Stats$/i]);
   const talentSection = section(lines, [/^Talents Priority/i], [/^Casting .* directly/i, /^Most-used community build/i, /^Best teams/i, /^Skills$/i]);
 
-  const weapons = parseDelimitedNames(weaponsSection, false, 8);
-  const artifacts = parseDelimitedNames(artifactsSection, false, 8);
-  const statText = [statSection.join(' | '), markdown].join(' | ');
+  // The guide currently represents artifact cards as unlabeled images in its
+  // reader markdown. Adjacent prose is not an item list, so never turn it
+  // into a recommendation. Icy Veins has stable artifact links and fills the
+  // field when available.
+  const weaponLinks = linkedCatalogNames(markdownSection(markdown, [/^Weapons$/i, /^Best Weapons/i], [/^Artifacts$/i, /^Substats Priority$/i, /^Talents Priority$/i, /^Recommended Primary Stats/i]), 'weapon', 8);
+  const weapons = weaponLinks;
+  const artifacts: string[] = [];
   const substats = extractStatsPriority(statSection.filter((line) => /substats?/i.test(line)).join(' | '));
   const mainStats = extractMainStats(statSection.join(' | '));
 
@@ -212,8 +205,8 @@ function parseGenshinBuilds(markdown: string, slug: string, url: string): Parsed
     summary,
     statPriority: substats,
     talentPriority,
-    weapons: weapons.map((name, index) => ({ name, tier: index === 0 ? 'Top recommendation' : `Option ${index + 1}`, note: 'Ranked recommendation from Genshin Builds.', source: url })),
-    artifacts: artifacts.map((set, index) => ({ set, pieces: /\b[24]$/.test(set) ? set.match(/\b[24]$/)?.[0] + '-piece' : index === 0 ? 'Recommended' : 'Alternative', note: 'Ranked recommendation from Genshin Builds.', source: url })),
+    weapons: weapons.map((name, index) => ({ name, tier: index === 0 ? 'Best in Slot' : index <= 2 ? 'Strong Alternative' : `Option ${index + 1}`, note: 'Ranked recommendation from Genshin Builds.', source: url })),
+    artifacts: artifacts.map((set, index) => ({ set, pieces: /\b[24]$/.test(set) ? set.match(/\b[24]$/)?.[0] + '-piece' : index === 0 ? 'Best in Slot' : index <= 2 ? 'Strong Alternative' : 'Alternative', note: 'Ranked recommendation from Genshin Builds.', source: url })),
     mainStats,
     teams,
     source: 'Genshin Builds',
@@ -228,17 +221,12 @@ function parseGenshinBuilds(markdown: string, slug: string, url: string): Parsed
 
 function parseIcyVeins(markdown: string, slug: string, url: string): ParsedSourceGuide {
   const lines = markdownLines(markdown);
-  const text = lines.join(' | ');
   const role = extractRole(lines);
-  const weaponStart = lines.findIndex((line) => /^Best Weapons for /i.test(line));
-  const artifactStart = lines.findIndex((line) => /^Best Artifacts for /i.test(line));
   const statsStart = lines.findIndex((line) => /Stat Priority$/i.test(line));
   const talentStart = lines.findIndex((line) => /Talent Priority$/i.test(line));
-  const weaponLines = weaponStart >= 0 ? lines.slice(weaponStart + 1, artifactStart >= 0 ? artifactStart : lines.length) : [];
-  const artifactLines = artifactStart >= 0 ? lines.slice(artifactStart + 1, statsStart >= 0 ? statsStart : lines.length) : [];
   const statLines = statsStart >= 0 ? lines.slice(statsStart + 1, talentStart >= 0 ? talentStart : lines.length) : [];
-  const weaponNames = unique(weaponLines.filter((line) => /\(R\d\)\s+\d+%$/.test(line)).map((line) => normalizedName(line))).slice(0, 8);
-  const artifactNames = unique(artifactLines.filter((line) => /^\d+\s*%$/.test(line) === false && /(?:Husk of Opulent Dreams|Golden Troupe|Archaic Petra|Tenacity of the Millelith|Celestial Gift|Desert Pavilion Chronicle|Crimson Witch|Noblesse Oblige|Deepwood Memories|Flower of Paradise Lost|Marechaussee Hunter|Nighttime Whispers)/i.test(line)).map((line) => normalizedName(line))).slice(0, 8);
+  const weaponNames = linkedCatalogNames(markdownSection(markdown, [/^Best Weapons for /i], [/^Best Artifacts for /i]), 'weapons', 8);
+  const artifactNames = linkedCatalogNames(markdownSection(markdown, [/^Best Artifacts for /i], [/^.+Stat Priority$/i, /^.+Talent Priority$/i, /^How to Play /i]), 'artifacts', 8);
   const mainStats = extractMainStats(statLines.join(' | '));
   const substats = extractStatsPriority(statLines.find((line) => /^Substats?:/i.test(line)) ?? '');
   const talentLine = lines.find((line) => /^Talent Priority:/i.test(line));
@@ -250,8 +238,8 @@ function parseIcyVeins(markdown: string, slug: string, url: string): ParsedSourc
     summary: extractIntro(lines),
     statPriority: substats,
     talentPriority,
-    weapons: weaponNames.map((name, index) => ({ name, tier: index === 0 ? 'Top recommendation' : `Option ${index + 1}`, note: 'Ranked recommendation from Icy Veins.', source: url })),
-    artifacts: artifactNames.map((set, index) => ({ set, pieces: 'Recommended', note: index === 0 ? 'Primary artifact recommendation from Icy Veins.' : 'Alternative artifact recommendation from Icy Veins.', source: url })),
+    weapons: weaponNames.map((name, index) => ({ name, tier: index === 0 ? 'Best in Slot' : index <= 2 ? 'Strong Alternative' : `Option ${index + 1}`, note: 'Ranked recommendation from Icy Veins.', source: url })),
+    artifacts: artifactNames.map((set, index) => ({ set, pieces: index === 0 ? 'Best in Slot' : index <= 2 ? 'Strong Alternative' : 'Alternative', note: index === 0 ? 'Highest-ranked artifact recommendation from Icy Veins.' : 'Ranked alternative from Icy Veins.', source: url })),
     mainStats,
     teams: [],
     source: 'Icy Veins',
@@ -264,54 +252,46 @@ function parseIcyVeins(markdown: string, slug: string, url: string): ParsedSourc
   };
 }
 
-function parseGame8(markdown: string, slug: string, url: string): ParsedSourceGuide {
-  const lines = markdownLines(markdown);
-  const text = lines.join(' | ');
-  const weapons = unique((text.match(/Best Weapon\s*\|\s*([^|]+)/i)?.[1] ?? '').split(/\s*\d+\.\s*/).filter(Boolean)).slice(0, 6);
-  const replacements = unique((text.match(/Replacement Weapons\s*\|\s*([^|]+)/i)?.[1] ?? '').split(/\s*\d+\.\s*/).filter(Boolean)).slice(0, 6);
-  const artifactMatch = text.match(/Best Artifacts\s*\|\s*([^|]+)/i)?.[1] ?? '';
-  const artifacts = unique([artifactMatch, ...text.match(/(?:Husk of Opulent Dreams|Golden Troupe|Celestial Gift|Archaic Petra|Tenacity of the Millelith)[^|\n]*/gi) ?? []]).slice(0, 6);
-  const mainStats = extractMainStats(text.replace(/\s*\|\s*/g, ' | '));
-  const statLine = text.match(/Artifact Sub Stats\s*\|\s*([^|]+)/i)?.[1] ?? '';
-  const statPriority = extractStatsPriority(statLine);
-  const role = extractRole(lines);
-  return {
-    characterId: slug,
-    role,
-    summary: extractIntro(lines),
-    statPriority,
-    talentPriority: [],
-    weapons: unique([...weapons, ...replacements]).map((name, index) => ({ name, tier: index === 0 ? 'Top recommendation' : `Option ${index + 1}`, note: 'Recommendation from Game8.', source: url })),
-    artifacts: artifacts.map((set, index) => ({ set: clean(set), pieces: index === 0 ? 'Recommended' : 'Alternative', note: 'Recommendation from Game8.', source: url })),
-    mainStats,
-    teams: [],
-    source: 'Game8',
-    sourceKey: 'game8',
-    sourceUrl: url,
-    fetchedAt: Date.now(),
-    materials: [],
-    sourceLinks: [{ label: 'Game8', url }],
-    quality: (weapons.length ? 2 : 0) + (artifacts.length ? 2 : 0) + (mainStats.sands ? 2 : 0) + (statPriority.length ? 1 : 0),
-  };
-}
-
 async function readSource(url: string, signal?: AbortSignal): Promise<string> {
   const readerUrl = `https://r.jina.ai/${url}`;
-  const timeout = AbortSignal.timeout(SOURCE_TIMEOUT_MS);
-  const response = await fetch(readerUrl, {
-    signal: signal ?? timeout,
-    headers: { Accept: 'text/plain', 'X-Return-Format': 'markdown' },
-  });
-  if (!response.ok) throw new Error(`Source request failed (${response.status})`);
-  const text = await response.text();
-  if (text.length < 500) throw new Error('Source returned too little content.');
-  return text;
+  let lastError: unknown;
+  // A public reader occasionally drops a request even while the original guide
+  // is healthy. Retry once before treating the source as unavailable.
+  for (let attempt = 0; attempt < 2; attempt += 1) {
+    const controller = new AbortController();
+    const timer = window.setTimeout(() => controller.abort(), SOURCE_TIMEOUT_MS);
+    const abortFromCaller = () => controller.abort();
+    if (signal?.aborted) abortFromCaller();
+    else signal?.addEventListener('abort', abortFromCaller, { once: true });
+    try {
+      const response = await fetch(readerUrl, {
+        signal: controller.signal,
+        headers: { Accept: 'text/plain', 'X-Return-Format': 'markdown' },
+      });
+      if (!response.ok) throw new Error(`Source request failed (${response.status})`);
+      const text = await response.text();
+      if (text.length < 500) throw new Error('Source returned too little content.');
+      return text;
+    } catch (error) {
+      if (signal?.aborted || (error instanceof Error && error.name === 'AbortError')) throw error;
+      lastError = error;
+    } finally {
+      window.clearTimeout(timer);
+      signal?.removeEventListener('abort', abortFromCaller);
+    }
+  }
+  throw lastError instanceof Error ? lastError : new Error('Build source request failed.');
 }
 
 function mergeSourceGuides(guides: ParsedSourceGuide[], slug: string): LivePlayerGuide {
   const ordered = [...guides].sort((a, b) => b.quality - a.quality);
   const primary = ordered.find((guide) => guide.sourceKey === 'genshinBuilds') ?? ordered[0];
   if (!primary) throw new Error('No usable source guide was returned.');
+
+  // Icy Veins publishes stable, linked catalog entries for equipment. The
+  // Genshin Builds reader output can replace image-only cards with prose, so
+  // it remains the preferred team source but cannot override linked equipment.
+  const equipmentGuide = ordered.find((guide) => guide.sourceKey === 'icyVeins' && guide.weapons.length && guide.artifacts.length);
 
   const supplement = (field: keyof CharacterGuide) => ordered.find((guide) => guide !== primary && Array.isArray(guide[field]) && (guide[field] as unknown[]).length)?.[field] as never;
   const firstNonEmptyMainStat = (key: keyof LivePlayerGuide['mainStats']) => ordered.find((guide) => guide.mainStats[key])?.mainStats[key] ?? '';
@@ -325,8 +305,8 @@ function mergeSourceGuides(guides: ParsedSourceGuide[], slug: string): LivePlaye
     summary: primary.summary || ordered.find((guide) => guide.summary)?.summary || '',
     statPriority: primary.statPriority.length ? primary.statPriority : (supplement('statPriority') as string[] | undefined) ?? [],
     talentPriority: primary.talentPriority.length ? primary.talentPriority : (supplement('talentPriority') as string[] | undefined) ?? [],
-    weapons: primary.weapons.length ? primary.weapons : (supplement('weapons') as LivePlayerGuide['weapons'] | undefined) ?? [],
-    artifacts: primary.artifacts.length ? primary.artifacts : (supplement('artifacts') as LivePlayerGuide['artifacts'] | undefined) ?? [],
+    weapons: equipmentGuide?.weapons ?? (primary.weapons.length ? primary.weapons : (supplement('weapons') as LivePlayerGuide['weapons'] | undefined) ?? []),
+    artifacts: equipmentGuide?.artifacts ?? [],
     mainStats: {
       sands: primary.mainStats.sands || firstNonEmptyMainStat('sands'),
       goblet: primary.mainStats.goblet || firstNonEmptyMainStat('goblet'),
@@ -339,16 +319,28 @@ function mergeSourceGuides(guides: ParsedSourceGuide[], slug: string): LivePlaye
   };
 }
 
-async function refreshGuide(cleanSlug: string, signal?: AbortSignal): Promise<LivePlayerGuide> {
+function hasCompleteBuild(guide: LivePlayerGuide): boolean {
+  // A summary alone is not a usable build. Do not cache or render a partial
+  // scrape as if it were authoritative.
+  return guide.weapons.length > 0 && guide.artifacts.length > 0 && guide.teams.length > 0;
+}
+
+async function refreshGuide(cleanSlug: string, signal?: AbortSignal, onUpdate?: (guide: LivePlayerGuide) => void): Promise<LivePlayerGuide> {
   const jobs: Array<Promise<ParsedSourceGuide>> = [];
+  const available: ParsedSourceGuide[] = [];
+  const publish = (guide: ParsedSourceGuide) => {
+    if (guide.quality < 3) return;
+    available.push(guide);
+    // Publish each verified source as it arrives. This permits the artifact
+    // cards to appear while teams or another source are still loading.
+    onUpdate?.(mergeSourceGuides(available, cleanSlug));
+  };
 
   const genshinBuildsUrl = SOURCES.genshinBuilds(cleanSlug);
   const icyVeinsUrl = SOURCES.icyVeins(cleanSlug);
-  const game8Url = SOURCES.game8Search(cleanSlug);
 
-  jobs.push(readSource(genshinBuildsUrl, signal).then((md) => parseGenshinBuilds(md, cleanSlug, genshinBuildsUrl)));
-  jobs.push(readSource(icyVeinsUrl, signal).then((md) => parseIcyVeins(md, cleanSlug, icyVeinsUrl)));
-  jobs.push(readSource(game8Url, signal).then((md) => parseGame8(md, cleanSlug, game8Url)));
+  jobs.push(readSource(genshinBuildsUrl, signal).then((md) => parseGenshinBuilds(md, cleanSlug, genshinBuildsUrl)).then((guide) => { publish(guide); return guide; }));
+  jobs.push(readSource(icyVeinsUrl, signal).then((md) => parseIcyVeins(md, cleanSlug, icyVeinsUrl)).then((guide) => { publish(guide); return guide; }));
 
   const results = await Promise.allSettled(jobs);
   const guides = results
@@ -356,65 +348,66 @@ async function refreshGuide(cleanSlug: string, signal?: AbortSignal): Promise<Li
     .map((result) => result.value)
     .filter((guide) => guide.quality >= 3);
 
-  if (!guides.length) {
-    const kqmUrl = SOURCES.kqm(cleanSlug);
-    try {
-      const markdown = await readSource(kqmUrl, signal);
-      guides.push(parseKqmFallback(markdown, cleanSlug, kqmUrl));
-    } catch {
-      // Preserve the cached guide if every live build source is unavailable.
-    }
-  }
-
   if (!guides.length) throw new Error('No usable maintained player-build source was available.');
-  return mergeSourceGuides(guides, cleanSlug);
+  const guide = mergeSourceGuides(guides, cleanSlug);
+  if (!hasCompleteBuild(guide)) throw new Error('The public build sources returned incomplete recommendations.');
+  return guide;
 }
 
-function refreshGuideOnce(cleanSlug: string): Promise<LivePlayerGuide> {
+async function refreshCompleteGuide(cleanSlug: string, signal?: AbortSignal, onUpdate?: (guide: LivePlayerGuide) => void): Promise<LivePlayerGuide> {
+  let lastError: unknown;
+  // Retry the whole source set once. This catches the common case where one
+  // reader request is rate-limited while the other source is still reachable.
+  for (let attempt = 0; attempt < 2; attempt += 1) {
+    try {
+      return await refreshGuide(cleanSlug, signal, onUpdate);
+    } catch (error) {
+      if (signal?.aborted || (error instanceof Error && error.name === 'AbortError')) throw error;
+      lastError = error;
+      if (attempt === 0) await new Promise<void>((resolve) => window.setTimeout(resolve, 800));
+    }
+  }
+  throw lastError instanceof Error ? lastError : new Error('Complete build data is unavailable.');
+}
+
+function refreshGuideOnce(cleanSlug: string, onUpdate?: (guide: LivePlayerGuide) => void): Promise<LivePlayerGuide> {
   const pending = guideRefreshes.get(cleanSlug);
   if (pending) return pending;
-  const request = refreshGuide(cleanSlug)
+  const request = refreshCompleteGuide(cleanSlug, undefined, onUpdate)
     .finally(() => guideRefreshes.delete(cleanSlug));
   guideRefreshes.set(cleanSlug, request);
   return request;
 }
 
-function parseKqmFallback(markdown: string, slug: string, url: string): ParsedSourceGuide {
-  const lines = markdownLines(markdown);
-  const statLine = lines.find((line) => /(?:Sands|Goblet|Circlet)/i.test(line)) ?? '';
-  return {
-    characterId: slug,
-    role: extractRole(lines),
-    summary: extractIntro(lines),
-    statPriority: extractStatsPriority(lines.find((line) => /substats?/i.test(line)) ?? ''),
-    talentPriority: unique((lines.find((line) => /talent priority/i.test(line)) ?? '').split(/[:>]/).slice(1)).slice(0, 5),
-    weapons: parseDelimitedNames(section(lines, [/^Weapons?$/i], [/^Artifacts?$/i, /^Team/i]), false, 8).map((name, index) => ({ name, tier: index === 0 ? 'Recommended' : `Option ${index + 1}`, note: 'Theorycrafting reference from KQM.', source: url })),
-    artifacts: parseDelimitedNames(section(lines, [/^Artifacts?$/i], [/^Weapons?$/i, /^Team/i]), false, 8).map((set, index) => ({ set, pieces: index === 0 ? 'Recommended' : 'Alternative', note: 'Theorycrafting reference from KQM.', source: url })),
-    mainStats: extractMainStats(statLine),
-    teams: [],
-    source: 'KQM',
-    sourceKey: 'kqm',
-    sourceUrl: url,
-    fetchedAt: Date.now(),
-    materials: [],
-    sourceLinks: [{ label: 'KQM', url }],
-    quality: 3,
-  };
-}
-
-export async function fetchPlayerGuide(slug: string, signal?: AbortSignal): Promise<LivePlayerGuide> {
+export async function fetchPlayerGuide(slug: string, signal?: AbortSignal, onUpdate?: (guide: LivePlayerGuide) => void): Promise<LivePlayerGuide> {
   const cleanSlug = slugify(slug);
-  const cacheKey = `player-guide:${cleanSlug}:v4`;
+  // v8 requires full build cards and invalidates partial guide responses.
+  const cacheKey = `player-guide:${cleanSlug}:v8`;
+  const inMemory = guideMemory.get(cacheKey);
+  if (inMemory && Date.now() < inMemory.expiresAt) { onUpdate?.(inMemory.value); return inMemory.value; }
   const cached = readCache<LivePlayerGuide>(cacheKey);
 
-  // Use persistent cached data immediately and refresh it in the background.
-  if (cached && !cached.stale) return cached.value;
+  // Cached guides are returned without a network request when reopening a
+  // character. The in-memory copy avoids even localStorage parsing while the
+  // app stays open.
+  if (cached && !cached.stale) {
+    guideMemory.set(cacheKey, { value: cached.value, expiresAt: Date.now() + CACHE_TTL });
+    onUpdate?.(cached.value);
+    return cached.value;
+  }
   if (cached && Date.now() - (cached.value.fetchedAt ?? 0) < STALE_REVALIDATE_TTL) {
-    void refreshGuideOnce(cleanSlug).then((fresh) => writeCache(cacheKey, fresh, CACHE_TTL)).catch(() => undefined);
+    onUpdate?.(cached.value);
+    void refreshGuideOnce(cleanSlug, onUpdate).then((fresh) => {
+      guideMemory.set(cacheKey, { value: fresh, expiresAt: Date.now() + CACHE_TTL });
+      writeCache(cacheKey, fresh, CACHE_TTL);
+    }).catch(() => undefined);
     return cached.value;
   }
 
-  const fresh = await refreshGuideOnce(cleanSlug);
+  // Foreground page loads use their own cancellation signal. Shared refreshes
+  // are reserved for background cache revalidation.
+  const fresh = signal ? await refreshCompleteGuide(cleanSlug, signal, onUpdate) : await refreshGuideOnce(cleanSlug, onUpdate);
+  guideMemory.set(cacheKey, { value: fresh, expiresAt: Date.now() + CACHE_TTL });
   writeCache(cacheKey, fresh, CACHE_TTL);
   return fresh;
 }
