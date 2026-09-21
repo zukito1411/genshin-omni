@@ -15,9 +15,9 @@ export function CharactersPage() {
   const weapons = useMemo(() => ['All', ...Array.from(new Set(characters.map((c) => c.weapon).filter(Boolean) as string[])).sort()], [characters]);
   const filtered = characters.filter((c) => (element === 'All' || c.element === element) && (rarity === 'All' || String(c.rarity) === rarity) && (weapon === 'All' || c.weapon === weapon));
   return <div>
-    <SectionTitle eyebrow="CHARACTER DATABASE" title="Playable Character Library" description="The index is fetched live from GenshinDB and image assets are resolved through genshin.dev. Search, filter, then open a character for the complete aggregated page." />
+    <SectionTitle eyebrow="CHARACTER DATABASE" title="Playable Character Library" description="Browse the full character roster, then open any character for builds, weapons, artifacts, teams, talents and materials." />
     <div className="toolbar sticky-toolbar"><input className="search-input" value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Search name, title, element, weapon or region" /><select value={element} onChange={(e) => setElement(e.target.value)}>{elements.map((item) => <option key={item}>{item}</option>)}</select><select value={weapon} onChange={(e) => setWeapon(e.target.value)}>{weapons.map((item) => <option key={item}>{item}</option>)}</select><select value={rarity} onChange={(e) => setRarity(e.target.value)}><option>All</option><option value="5">5★</option><option value="4">4★</option></select></div>
-    <div className="results-bar"><span>{loading ? 'Loading...' : `${filtered.length} characters`}</span><span className="muted">Live data · cached locally for speed</span></div>
+    <div className="results-bar"><span>{loading ? 'Loading...' : `${filtered.length} characters`}</span><span className="muted">Characters available in the library</span></div>
     {loading && <div className="skeleton-grid">{Array.from({ length: 12 }).map((_, i) => <div className="skeleton-card" key={i} />)}</div>}
     {error && <div className="error-box"><strong>Character data could not be loaded.</strong><p>{error}</p><p>Try refreshing cached data from the sidebar or check the provider status.</p></div>}
     {!loading && !error && <div className="character-grid">{filtered.map((character) => <CharacterCard key={character.id || character.name} character={character} />)}</div>}

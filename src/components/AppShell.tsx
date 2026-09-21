@@ -32,7 +32,7 @@ export function AppShell() {
     <aside className="sidebar">
       <div className="brand"><div className="brand-mark"><Sparkles size={18} /></div><div><strong>Teyvat Atlas</strong><span>Genshin player library</span></div></div>
       <nav className="sidebar-nav">{nav.map(({ to, label, icon: Icon }) => <NavLink key={to} to={to} className={({ isActive }) => isActive ? 'nav-link active' : 'nav-link'}><Icon size={17} />{label}</NavLink>)}</nav>
-      <div className="sidebar-footer"><span>Live sources + local tools</span><button className="text-button" onClick={() => { clearAppCache(); window.location.reload(); }}>Refresh cached data</button></div>
+      <div className="sidebar-footer"><span>Player tools</span><button className="text-button" onClick={() => { clearAppCache(); window.location.reload(); }}>Refresh latest data</button></div>
     </aside>
     <main className="main">
       <header className="topbar">

@@ -38,6 +38,8 @@ function materialFromObject(value: unknown): MaterialRef | null {
   const name = firstString(obj.name, obj.itemName, obj.material, obj.displayName, obj.label);
   if (!name) return null;
   const amountRaw = obj.amount ?? obj.quantity ?? obj.count;
+  const hasMaterialShape = amountRaw !== undefined || obj.material !== undefined || obj.itemName !== undefined;
+  if (!hasMaterialShape) return null;
   const amount = typeof amountRaw === 'number' ? amountRaw : Number(amountRaw);
   return {
     name,
@@ -49,25 +51,58 @@ function materialFromObject(value: unknown): MaterialRef | null {
 }
 
 export function extractMaterials(raw: Record<string, unknown>): MaterialRef[] {
-  const found: MaterialRef[] = [];
-  const visit = (value: unknown, depth = 0) => {
-    if (depth > 5 || found.length >= 80) return;
-    if (Array.isArray(value)) {
-      value.forEach((item) => visit(item, depth + 1));
+  const totals = new Map<string, MaterialRef>();
+
+  const add = (material: MaterialRef) => {
+    const existing = totals.get(material.name);
+    if (existing) {
+      existing.amount = (existing.amount ?? 0) + (material.amount ?? 0) || existing.amount;
+      existing.category = existing.category ?? material.category;
+      existing.source = existing.source ?? material.source;
+      existing.icon = existing.icon ?? material.icon;
       return;
     }
+    totals.set(material.name, material);
+  };
+
+  const visit = (value: unknown, depth = 0, context = '', inheritedCategory?: string) => {
+    if (depth > 10 || totals.size >= 160) return;
+
+    if (Array.isArray(value)) {
+      value.forEach((item) => visit(item, depth + 1, context));
+      return;
+    }
+
     if (!value || typeof value !== 'object') return;
     const obj = value as Record<string, unknown>;
-    const candidateMaterial = materialFromObject(obj);
-    if (candidateMaterial) {
-      if (!found.some((existing) => existing.name === candidateMaterial.name && existing.amount === candidateMaterial.amount)) found.push(candidateMaterial);
-    }
+    const category = /talent/i.test(context) ? 'Talent' : /ascension/i.test(context) ? 'Ascension' : inheritedCategory;
+
+    const direct = materialFromObject(obj);
+    if (direct) add({ ...direct, category: direct.category ?? category });
+
+    const materialContext = /cost|material|ascension|talent|items|item|upgrade/i.test(context);
     Object.entries(obj).forEach(([key, child]) => {
-      if (/cost|material|ascension|talent|weapon|level/i.test(key)) visit(child, depth + 1);
+      const isTechnical = /^(level|rank|id|type|category|name|description|source|obtain|amount|quantity|count)$/i.test(key);
+      if (materialContext && !isTechnical) {
+        if (typeof child === 'number' && Number.isFinite(child) && child > 0) {
+          add({ name: key, amount: child, category });
+          return;
+        }
+        if (typeof child === 'string' && /^\d+(?:\.\d+)?$/.test(child)) {
+          const amount = Number(child);
+          if (amount > 0) add({ name: key, amount, category });
+          return;
+        }
+      }
+      if (child && typeof child === 'object' && (/cost|material|ascension|talent|items|item|upgrade/i.test(key) || materialContext)) {
+        const nextCategory = /talent/i.test(key) ? 'Talent' : /ascension/i.test(key) ? 'Ascension' : category;
+        visit(child, depth + 1, key, nextCategory);
+      }
     });
   };
+
   visit(raw);
-  return found;
+  return [...totals.values()];
 }
 
 export function baseStatRows(stats: Record<string, unknown>): Array<Record<string, unknown>> {

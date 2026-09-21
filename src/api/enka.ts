@@ -1,6 +1,6 @@
 import { getJson } from './http';
 
-const BASE_URL = import.meta.env.VITE_ENKA_API ?? 'https://enka.network/api';
+const BASE_URL = 'https://enka.network/api';
 
 export async function fetchEnkaByUid(uid: string): Promise<any> {
   const clean = uid.replace(/\D/g, '');
