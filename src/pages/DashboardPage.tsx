@@ -12,14 +12,140 @@ import {
   Swords,
   Users,
   Sparkles,
+  ExternalLink,
 } from 'lucide-react';
 import { SectionTitle } from '../components/SectionTitle';
-import { AsyncImage } from '../components/AsyncImage';
-import {
-  assetKey,
-  characterImageSources,
-} from '../api/genshinDev';
 import { useCharacters } from '../hooks/useCharacters';
+
+interface GenshinNewsItem {
+  id?: string;
+  url?: string;
+  title?: string;
+  content_text?: string;
+  content_html?: string;
+  image?: string;
+  date_published?: string;
+}
+
+interface GenshinNewsFeed {
+  version?: string;
+  title?: string;
+  items?: GenshinNewsItem[];
+}
+
+const NEWS_FEED_URL =
+  'https://feeds.c3kay.de/genshin.json';
+
+const NEWS_ROTATION_MS = 6000;
+
+function normalizeImageUrl(
+  value: string | undefined,
+): string | null {
+  if (!value) {
+    return null;
+  }
+
+  const trimmed = value.trim();
+
+  if (!trimmed) {
+    return null;
+  }
+
+  if (
+    trimmed.startsWith('https://') ||
+    trimmed.startsWith('http://')
+  ) {
+    return trimmed;
+  }
+
+  if (trimmed.startsWith('//')) {
+    return `https:${trimmed}`;
+  }
+
+  return null;
+}
+
+function extractArticleImages(
+  contentHtml: string | undefined,
+): string[] {
+  if (!contentHtml) {
+    return [];
+  }
+
+  if (typeof DOMParser === 'undefined') {
+    return [];
+  }
+
+  const parser = new DOMParser();
+  const document = parser.parseFromString(
+    contentHtml,
+    'text/html',
+  );
+
+  const images = Array.from(
+    document.querySelectorAll('img'),
+  );
+
+  return images
+    .flatMap((image) => [
+      image.getAttribute('src'),
+      image.getAttribute('data-src'),
+      image.getAttribute('data-original'),
+      image.getAttribute('data-lazy-src'),
+    ])
+    .map((value) =>
+      normalizeImageUrl(value ?? undefined),
+    )
+    .filter(
+      (
+        value,
+      ): value is string =>
+        Boolean(value),
+    );
+}
+
+function getNewsImageCandidates(
+  item: GenshinNewsItem,
+): string[] {
+  const candidates = [
+    normalizeImageUrl(item.image),
+    ...extractArticleImages(
+      item.content_html,
+    ),
+  ].filter(
+    (
+      value,
+    ): value is string =>
+      Boolean(value),
+  );
+
+  return Array.from(
+    new Set(candidates),
+  );
+}
+
+function formatNewsDate(
+  value: string | undefined,
+): string {
+  if (!value) {
+    return 'Latest news';
+  }
+
+  const date = new Date(value);
+
+  if (Number.isNaN(date.getTime())) {
+    return 'Latest news';
+  }
+
+  return new Intl.DateTimeFormat(
+    undefined,
+    {
+      year: 'numeric',
+      month: 'short',
+      day: 'numeric',
+    },
+  ).format(date);
+}
 
 export function DashboardPage() {
   const {
@@ -40,102 +166,167 @@ export function DashboardPage() {
     [allCharacters],
   );
 
-  const slideshowCharacters =
-    useMemo(() => {
-      if (!allCharacters.length) {
-        return [];
-      }
-
-      const favoriteIds =
-        new Set(
-          favorites.map(
-            (character) =>
-              character.id,
-          ),
-        );
-
-      const remainingCharacters =
-        allCharacters.filter(
-          (character) =>
-            !favoriteIds.has(
-              character.id,
-            ),
-        );
-
-      return [
-        ...favorites,
-        ...remainingCharacters,
-      ];
-    }, [
-      allCharacters,
-      favorites,
-    ]);
+  const [
+    news,
+    setNews,
+  ] = useState<GenshinNewsItem[]>([]);
 
   const [
-    slideIndex,
-    setSlideIndex,
+    newsIndex,
+    setNewsIndex,
   ] = useState(0);
 
   const [
-    isTransitioning,
-    setIsTransitioning,
+    newsLoading,
+    setNewsLoading,
+  ] = useState(true);
+
+  const [
+    newsError,
+    setNewsError,
   ] = useState(false);
 
+  const [
+    newsImageIndex,
+    setNewsImageIndex,
+  ] = useState(0);
+
   useEffect(() => {
-    if (
-      slideshowCharacters.length <= 1
-    ) {
+    let cancelled = false;
+
+    async function loadNews() {
+      setNewsLoading(true);
+      setNewsError(false);
+
+      try {
+        const response =
+          await fetch(
+            NEWS_FEED_URL,
+            {
+              headers: {
+                Accept:
+                  'application/json',
+              },
+            },
+          );
+
+        if (!response.ok) {
+          throw new Error(
+            `News feed returned ${response.status}`,
+          );
+        }
+
+        const data =
+          (await response.json()) as GenshinNewsFeed;
+
+        const items = Array.isArray(
+          data.items,
+        )
+          ? data.items.filter(
+              (item) =>
+                Boolean(
+                  item.title?.trim(),
+                ) &&
+                Boolean(
+                  item.url?.trim(),
+                ),
+            )
+          : [];
+
+        if (cancelled) {
+          return;
+        }
+
+        setNews(items);
+        setNewsIndex(0);
+        setNewsImageIndex(0);
+
+        if (!items.length) {
+          setNewsError(true);
+        }
+      } catch {
+        if (cancelled) {
+          return;
+        }
+
+        setNews([]);
+        setNewsIndex(0);
+        setNewsImageIndex(0);
+        setNewsError(true);
+      } finally {
+        if (!cancelled) {
+          setNewsLoading(false);
+        }
+      }
+    }
+
+    void loadNews();
+
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  useEffect(() => {
+    if (news.length <= 1) {
       return;
     }
 
     const interval =
       window.setInterval(() => {
-        setIsTransitioning(true);
+        setNewsIndex(
+          (current) =>
+            (current + 1) %
+            news.length,
+        );
 
-        window.setTimeout(() => {
-          setSlideIndex(
-            (current) =>
-              (current + 1) %
-              slideshowCharacters.length,
-          );
-
-          setIsTransitioning(false);
-        }, 350);
-      }, 5000);
+        setNewsImageIndex(0);
+      }, NEWS_ROTATION_MS);
 
     return () =>
       window.clearInterval(
         interval,
       );
-  }, [
-    slideshowCharacters.length,
-  ]);
+  }, [news.length]);
 
   useEffect(() => {
     if (
-      slideIndex >=
-      slideshowCharacters.length
+      newsIndex >=
+      news.length
     ) {
-      setSlideIndex(0);
+      setNewsIndex(0);
     }
   }, [
-    slideIndex,
-    slideshowCharacters.length,
+    newsIndex,
+    news.length,
   ]);
 
-  const featured =
-    slideshowCharacters[
-    slideIndex
-    ] ??
-    slideshowCharacters[0];
+  const featuredNews =
+    news[newsIndex];
 
-  const featuredImages =
-    featured
-      ? characterImageSources(
-        featured,
-        'card',
-      )
-      : [];
+  const newsImageCandidates =
+    useMemo(() => {
+      if (!featuredNews) {
+        return [];
+      }
+
+      return getNewsImageCandidates(
+        featuredNews,
+      );
+    }, [featuredNews]);
+
+  useEffect(() => {
+    setNewsImageIndex(0);
+  }, [
+    featuredNews?.id,
+    featuredNews?.url,
+    featuredNews?.image,
+  ]);
+
+  const currentNewsImage =
+    newsImageCandidates[
+      newsImageIndex
+    ];
 
   return (
     <div className="home-page">
@@ -222,52 +413,186 @@ export function DashboardPage() {
             <span />
           </div>
 
-          {featured && (
-            <div
-              style={{
-                position:
-                  'absolute',
-                inset: 0,
-                opacity:
-                  isTransitioning
-                    ? 0
-                    : 1,
-                transform:
-                  isTransitioning
-                    ? 'translateY(12px) scale(0.985)'
-                    : 'translateY(0) scale(1)',
-                transition:
-                  'opacity 350ms ease, transform 350ms ease',
-              }}
-            >
-              <AsyncImage
-                src={
-                  featuredImages
-                }
-                alt={
-                  featured.name
-                }
-                className="home-hero__character"
-                assetKey={assetKey(
-                  'characters',
-                  featured.id ||
-                  featured.name,
-                )}
-              />
+          <div
+            style={{
+              position:
+                'absolute',
+              inset: 0,
+              display: 'flex',
+              flexDirection:
+                'column',
+              justifyContent:
+                'flex-end',
+              overflow: 'hidden',
+              padding:
+                'clamp(18px, 3vw, 32px)',
+            }}
+          >
+            {newsLoading ? (
+              <div
+                style={{
+                  display: 'flex',
+                  alignItems:
+                    'center',
+                  justifyContent:
+                    'center',
+                  height: '100%',
+                  textAlign:
+                    'center',
+                  padding: '24px',
+                }}
+              >
+                <div>
+                  <div className="eyebrow">
+                    GENSHIN NEWS
+                  </div>
 
-              <div className="home-hero__caption">
-                <span>
-                  {
-                    featured.name
-                  }
-                </span>
-
-                <small>
-                  {`${featured.element ?? 'Unknown'} · ${featured.weapon ?? 'Character'}`}
-                </small>
+                  <h2>
+                    Loading latest news…
+                  </h2>
+                </div>
               </div>
-            </div>
-          )}
+            ) : featuredNews ? (
+              <>
+                {currentNewsImage && (
+                  <img
+                    src={
+                      currentNewsImage
+                    }
+                    alt=""
+                    aria-hidden="true"
+                    className="home-hero__character"
+                    onError={() => {
+                      setNewsImageIndex(
+                        (current) =>
+                          current + 1,
+                      );
+                    }}
+                  />
+                )}
+
+                <div
+                  style={{
+                    position:
+                      'absolute',
+                    inset: 0,
+                    background:
+                      'linear-gradient(180deg, rgba(4, 10, 17, 0.02) 25%, rgba(4, 10, 17, 0.82) 100%)',
+                    pointerEvents:
+                      'none',
+                  }}
+                />
+
+                <div
+                  style={{
+                    position:
+                      'relative',
+                    zIndex: 2,
+                    maxWidth:
+                      '720px',
+                  }}
+                >
+                  <div className="eyebrow">
+                    GENSHIN NEWS
+                  </div>
+
+                  <h2
+                    style={{
+                      margin:
+                        '6px 0 8px',
+                    }}
+                  >
+                    {featuredNews.title}
+                  </h2>
+
+                  <div
+                    style={{
+                      display:
+                        'flex',
+                      alignItems:
+                        'center',
+                      gap: '10px',
+                      flexWrap:
+                        'wrap',
+                    }}
+                  >
+                    <small>
+                      {formatNewsDate(
+                        featuredNews.date_published,
+                      )}
+                    </small>
+
+                    {featuredNews.url && (
+                      <a
+                        href={
+                          featuredNews.url
+                        }
+                        target="_blank"
+                        rel="noreferrer"
+                        className="inline-source"
+                        onClick={(event) =>
+                          event.stopPropagation()
+                        }
+                      >
+                        Read article
+                        <ExternalLink
+                          size={12}
+                        />
+                      </a>
+                    )}
+                  </div>
+                </div>
+              </>
+            ) : (
+              <div
+                style={{
+                  display: 'flex',
+                  alignItems:
+                    'center',
+                  justifyContent:
+                    'center',
+                  height: '100%',
+                  textAlign:
+                    'center',
+                  padding: '24px',
+                }}
+              >
+                <div>
+                  <div className="eyebrow">
+                    GENSHIN NEWS
+                  </div>
+
+                  <h2>
+                    News is temporarily
+                    unavailable.
+                  </h2>
+
+                  <p>
+                    The live news source
+                    could not be reached.
+                  </p>
+                </div>
+              </div>
+            )}
+
+            {newsError &&
+              featuredNews && (
+                <div
+                  style={{
+                    position:
+                      'absolute',
+                    top: '16px',
+                    right: '16px',
+                    zIndex: 3,
+                    fontSize:
+                      '10px',
+                    opacity: 0.65,
+                  }}
+                >
+                  Live feed
+                </div>
+              )}
+          </div>
         </div>
       </section>
 
