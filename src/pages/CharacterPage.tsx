@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
-import { Link, useParams } from 'react-router-dom';
+import { Link, useParams, useSearchParams } from 'react-router-dom';
 import { Check, ExternalLink, Heart, Sparkles, Swords } from 'lucide-react';
 import { fetchAggregatedCharacter } from '../api/aggregator';
 import { assetKey, characterImageSources, elementImageSources, entityImageSources, fetchGenshinBuildsAssetMap, findGenshinBuildsAsset, genshinBuildsMaterialImage } from '../api/genshinDev';
@@ -20,6 +20,13 @@ const links = (name: string) => {
     { label: 'Prydwen', url: `https://www.prydwen.gg/genshin/characters/${slug}` },
   ];
 };
+
+const TRAVELER_ELEMENTS = ['Anemo', 'Geo', 'Electro', 'Dendro', 'Hydro', 'Pyro', 'Cryo'] as const;
+type TravelerElement = (typeof TRAVELER_ELEMENTS)[number];
+
+function travelerElementFrom(value: string | null): TravelerElement {
+  return TRAVELER_ELEMENTS.find((element) => element.toLowerCase() === value?.toLowerCase()) ?? 'Anemo';
+}
 
 function sourceLinksForGuide(guide?: CharacterGuide) {
   return guide?.sourceLinks?.length ? guide.sourceLinks : [];
@@ -160,15 +167,18 @@ function formatWeaponSecondary(value: unknown, stat?: string, example?: string):
 
 export function CharacterPage() {
   const { id = '' } = useParams();
+  const [searchParams, setSearchParams] = useSearchParams();
   const { allCharacters } = useCharacters('');
+  const isTraveler = /^traveler$/i.test(id);
+  const travelerElement = travelerElementFrom(searchParams.get('element'));
+  const activeCharacterQuery = isTraveler ? `traveler-${travelerElement.toLowerCase()}` : id;
   const [character, setCharacter] = useState<AggregatedCharacter | null>(null);
   const [loading, setLoading] = useState(true);
   const [guideLoading, setGuideLoading] = useState(true);
   const [gameDataLoading, setGameDataLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [tab, setTab] = useState<'build' | 'skills' | 'constellations' | 'materials'>('build');
-  const [favorite, setFavorite] = useState(() => localStorage.getItem(`favorite:${id}`) === '1');
-  const [materialChecks, setMaterialChecks] = useState<Record<string, boolean>>({});
+  const [favorite, setFavorite] = useState(() => localStorage.getItem(`favorite:${activeCharacterQuery}`) === '1');
   const [liveGuide, setLiveGuide] = useState<LivePlayerGuide | null>(null);
   const [weaponEntities, setWeaponEntities] = useState<Record<string, LibraryEntity>>({});
   const [artifactEntities, setArtifactEntities] = useState<Record<string, LibraryEntity>>({});
@@ -197,11 +207,11 @@ export function CharacterPage() {
     setSelectedRecommendation(null);
     setSelectedRecommendationType(null);
     setWeaponProgressions({});
-    setFavorite(localStorage.getItem(`favorite:${id}`) === '1');
+    setFavorite(localStorage.getItem(`favorite:${activeCharacterQuery}`) === '1');
 
     // Render primary structured data first. Detailed sources then hydrate the
     // same page in place, so a slow scraper never requires a page reload.
-    fetchCharacter(id)
+    fetchCharacter(activeCharacterQuery)
       .then((characterValue) => { if (active) setCharacter({ ...characterValue, stats: {}, secondary: {}, sources: [] }); })
       .catch((err) => {
         if (active && err?.name !== 'AbortError') setError(err instanceof Error ? err.message : 'Unable to load this character.');
@@ -215,7 +225,7 @@ export function CharacterPage() {
       let attempt = 0;
       while (active) {
         try {
-          const enriched = await fetchAggregatedCharacter(id);
+          const enriched = await fetchAggregatedCharacter(activeCharacterQuery);
           if (!active) return;
           setCharacter(enriched);
           const detail = enriched.secondary.dev;
@@ -230,7 +240,7 @@ export function CharacterPage() {
       let attempt = 0;
       while (active) {
         try {
-          const guideValue = await fetchPlayerGuide(slugify(id), undefined, (partialGuide) => {
+          const guideValue = await fetchPlayerGuide(slugify(activeCharacterQuery), undefined, (partialGuide) => {
             if (active) setLiveGuide(partialGuide);
           });
           if (active) { setLiveGuide(guideValue); setGuideLoading(false); }
@@ -245,7 +255,7 @@ export function CharacterPage() {
     void hydrateGuide();
 
     return () => { active = false; controller.abort(); };
-  }, [id]);
+  }, [activeCharacterQuery]);
 
   const guide = useMemo<CharacterGuide | undefined>(() => liveGuide ? liveGuide : undefined, [liveGuide]);
   const teamCharacterByName = useMemo(
@@ -259,10 +269,10 @@ export function CharacterPage() {
     const load = async () => {
       const [weaponEntries, artifactEntries, weaponAssetMap, artifactAssetMap] = await Promise.all([
         Promise.all(liveGuide.weapons.map(async (item) => {
-        try { return [item.name, await fetchEntity('weapons', catalogName(item.name), controller.signal)] as const; } catch { return null; }
+          try { return [item.name, await fetchEntity('weapons', catalogName(item.name), controller.signal)] as const; } catch { return null; }
         })),
         Promise.all(liveGuide.artifacts.map(async (item) => {
-        try { return [item.set, await fetchEntity('artifacts', catalogName(item.set), controller.signal)] as const; } catch { return null; }
+          try { return [item.set, await fetchEntity('artifacts', catalogName(item.set), controller.signal)] as const; } catch { return null; }
         })),
         fetchGenshinBuildsAssetMap('weapons', controller.signal).catch(() => ({})),
         fetchGenshinBuildsAssetMap('artifacts', controller.signal).catch(() => ({})),
@@ -323,7 +333,14 @@ export function CharacterPage() {
   const buildLinks = links(character.name);
   const guideSources = sourceLinksForGuide(guide);
   const imageSources = characterImageSources(character, 'portrait');
-  const characterId = character.id;
+  const characterId = activeCharacterQuery;
+  const displayName = isTraveler ? `${travelerElement} Traveler` : character.name;
+
+  function selectTravelerElement(element: TravelerElement) {
+    const next = new URLSearchParams(searchParams);
+    next.set('element', element.toLowerCase());
+    setSearchParams(next, { replace: true });
+  }
 
   function toggleFavorite() {
     const next = !favorite;
@@ -353,7 +370,7 @@ export function CharacterPage() {
     <Link to="/characters" className="back-link">↩ Character library</Link>
 
     <section className={`character-hero ${String(character.element ?? '').toLowerCase()}`}>
-      <div className="character-hero__art"><AsyncImage src={imageSources} alt={character.name} className="character-portrait" assetKey={assetKey('characters', character.id || character.name)} /></div>
+      <div className="character-hero__art"><AsyncImage src={imageSources} alt={displayName} className="character-portrait" assetKey={assetKey('characters', activeCharacterQuery)} /></div>
       <div className="character-hero__copy">
         <div className="hero-meta">
           <span className={`element-chip large element-${(character.element ?? 'unknown').toLowerCase()}`}>{elementImageSources(character.element).length > 0 && <img src={elementImageSources(character.element)[0]} alt="" />}{character.element ?? 'Unknown'}</span>
@@ -362,12 +379,18 @@ export function CharacterPage() {
           {character.rarity && <span className="gold-stars">{'★'.repeat(character.rarity)}</span>}
         </div>
         <div className="eyebrow">{character.title ?? 'Playable character'}</div>
-        <h1>{character.name}</h1>
+        <h1>{displayName}</h1>
         <p>{character.description ?? 'Learn the character, recommended build, teams and materials in one place.'}</p>
         <div className="hero-actions">
           <button className={`button ${favorite ? 'primary' : 'secondary'}`} onClick={toggleFavorite}><Heart size={15} fill={favorite ? 'currentColor' : 'none'} /> {favorite ? 'Saved' : 'Save Character'}</button>
           <button className="button secondary" onClick={() => setTab('build')}><Sparkles size={15} /> Build Guide</button>
         </div>
+        {isTraveler && <label className="traveler-element-control">
+          <span>Traveler element</span>
+          <select value={travelerElement} onChange={(event) => selectTravelerElement(event.target.value as TravelerElement)} aria-label="Traveler element">
+            {TRAVELER_ELEMENTS.map((element) => <option key={element} value={element}>{element}</option>)}
+          </select>
+        </label>}
       </div>
     </section>
 
@@ -424,8 +447,8 @@ export function CharacterPage() {
       </section>
 
       <section className="panel player-panel player-panel--wide">
-        <SectionTitle eyebrow="LEVELING" title="Materials & farming" description="Exact material totals are taken from the live character data and can be checked against the map." />
-        {materials.length ? <div className="material-table">{materials.map((material, index) => <label className="material-row player-material-row" key={`${material.name}-${index}`}><input type="checkbox" checked={materialChecks[material.name] ?? (localStorage.getItem(`material:${character.id}:${material.name}`) === '1')} onChange={(e) => { const checked = e.target.checked; setMaterialChecks((current) => ({ ...current, [material.name]: checked })); localStorage.setItem(`material:${character.id}:${material.name}`, checked ? '1' : '0'); }} /><MaterialImage name={material.name} entity={materialEntities[material.name]} /><span><strong>{material.name}</strong>{material.category && <small>{material.category}</small>}</span><strong>{material.amount ?? '—'}</strong></label>)}</div> : <div className="player-empty"><div><strong>Material totals are not available from this character response.</strong><p>The app does not invent requirements.</p></div></div>}
+        <SectionTitle eyebrow="LEVELING" title="Materials & farming" description="Exact material totals are taken from the live character data." />
+        {materials.length ? <div className="material-table">{materials.map((material, index) => <div className="material-row player-material-row" key={`${material.name}-${index}`}><MaterialImage name={material.name} entity={materialEntities[material.name]} /><span><strong>{material.name}</strong>{material.category && <small>{material.category}</small>}</span><strong>{material.amount ?? '—'}</strong></div>)}</div> : <div className="player-empty"><div><strong>Material totals are not available from this character response.</strong><p>The app does not invent requirements.</p></div></div>}
       </section>
 
       <section className="panel player-panel player-panel--wide source-panel">
@@ -438,7 +461,7 @@ export function CharacterPage() {
 
     {tab === 'constellations' && <section className="panel player-panel"><SectionTitle eyebrow="CONSTELLATIONS" title="Constellations" description="See what changes at each constellation level before deciding whether you want to invest further." />{constellations.length ? <div className="constellation-list">{constellations.map((entry, index) => <article className="constellation-row" key={`${entry.name}-${index}`}><div className="constellation-number">C{entry.level ?? index + 1}</div><div><h3>{entry.name}</h3><p>{entry.description ?? 'Loading description!'}</p></div></article>)}</div> : <div className="empty-state">{gameDataLoading ? 'Loading verified constellation descriptions!' : 'Constellation descriptions are being refreshed from the game-data source.'}</div>}</section>}
 
-    {tab === 'materials' && <section className="panel player-panel"><SectionTitle eyebrow="MATERIAL PLANNER" title={`${character.name} leveling materials`} description="Check off materials as you farm them." />{materials.length ? <div className="material-table">{materials.map((material, index) => <label className="material-row player-material-row" key={`${material.name}-${index}`}><input type="checkbox" checked={materialChecks[material.name] ?? false} onChange={(e) => { const checked = e.target.checked; setMaterialChecks((current) => ({ ...current, [material.name]: checked })); }} /><MaterialImage name={material.name} entity={materialEntities[material.name]} /><span><strong>{material.name}</strong>{material.category && <small>{material.category}</small>}</span><strong>{material.amount ?? '—'}</strong></label>)}</div> : <div className="player-empty"><div><strong>No material list was returned.</strong><p>The live source does not currently expose material requirements for this character.</p></div></div>}</section>}
+    {tab === 'materials' && <section className="panel player-panel"><SectionTitle eyebrow="LEVELING MATERIALS" title={`${displayName} leveling materials`} description="Materials required to raise this character." />{materials.length ? <div className="material-table">{materials.map((material, index) => <div className="material-row player-material-row" key={`${material.name}-${index}`}><MaterialImage name={material.name} entity={materialEntities[material.name]} /><span><strong>{material.name}</strong>{material.category && <small>{material.category}</small>}</span><strong>{material.amount ?? '—'}</strong></div>)}</div> : <div className="player-empty"><div><strong>No material list was returned.</strong><p>The live source does not currently expose material requirements for this character.</p></div></div>}</section>}
 
     {selectedRecommendation && <div className="drawer-backdrop" onMouseDown={() => { setSelectedRecommendation(null); setSelectedRecommendationType(null); }}>
       <aside className="drawer recommendation-drawer" onMouseDown={(event) => event.stopPropagation()}>
