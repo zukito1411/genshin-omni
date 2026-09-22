@@ -372,7 +372,7 @@ export function CharacterPage() {
     </section>
 
     <div className="character-quickfacts">
-      <div><span>Role</span><strong>{guide?.role.join(' • ') || (guideLoading ? 'Loading build data!' : `${character.weapon ?? 'Character'} Â· ${character.element ?? 'Unknown'}`)}</strong></div>
+      <div><span>Role</span><strong>{guide?.role.join(' • ') || (guideLoading ? 'Loading build data!' : `${character.weapon ?? 'Character'} • ${character.element ?? 'Unknown'}`)}</strong></div>
       <div><span>Playstyle</span><strong>{guide?.summary || (guideLoading ? 'Loading current recommendations!' : 'Use the live character data below to understand this character.')}</strong></div>
       <div><span>Talent focus</span><strong>{guide?.talentPriority.join(' → ') || (guideLoading ? 'Loading!' : 'Open Skills')}</strong></div>
     </div>
@@ -389,7 +389,7 @@ export function CharacterPage() {
         <SectionTitle eyebrow="RECOMMENDED BUILD" title="Build this character" description={guide?.summary ?? (guideLoading ? 'Loading maintained player build sources!' : 'No public build source is currently available for this character; the game data below remains available.')} />
         {guide ? <>
           <div className="build-stat-grid player-build-summary">
-            <div><span>Role</span><strong>{guide.role.length ? guide.role.join(' Â· ') : (guideLoading ? 'Analyzing build role!' : 'Role not specified by the guide')}</strong></div>
+            <div><span>Role</span><strong>{guide.role.length ? guide.role.join(' • ') : (guideLoading ? 'Analyzing build role!' : 'Role not specified by the guide')}</strong></div>
             <div><span>Talent priority</span><strong>{guide.talentPriority.length ? guide.talentPriority.join(' → ') : (guideLoading ? 'Analyzing talent priority!' : 'See Skills')}</strong></div>
             <div><span>Substat priority</span><strong>{guide.statPriority.length ? guide.statPriority.join(' → ') : (guideLoading ? 'Analyzing substats!' : 'See main stats below')}</strong></div>
           </div>
