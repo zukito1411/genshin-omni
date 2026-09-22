@@ -9,10 +9,10 @@ import {
   BookOpen,
   Boxes,
   Compass,
+  ExternalLink,
   Swords,
   Users,
   Sparkles,
-  ExternalLink,
 } from 'lucide-react';
 import { SectionTitle } from '../components/SectionTitle';
 import { useCharacters } from '../hooks/useCharacters';
@@ -39,102 +39,144 @@ const NEWS_FEED_URL =
 const NEWS_ROTATION_MS = 6000;
 
 function normalizeImageUrl(
-  value: string | undefined,
+  value?: string,
 ): string | null {
   if (!value) {
     return null;
   }
 
-  const trimmed = value.trim();
+  const trimmed =
+    value.trim();
 
   if (!trimmed) {
     return null;
   }
 
   if (
-    trimmed.startsWith('https://') ||
-    trimmed.startsWith('http://')
+    trimmed.startsWith(
+      '//',
+    )
   ) {
-    return trimmed;
+    return `https:${trimmed}`;
   }
 
-  if (trimmed.startsWith('//')) {
-    return `https:${trimmed}`;
+  try {
+    const url =
+      new URL(trimmed);
+
+    if (
+      url.protocol ===
+        'http:' ||
+      url.protocol ===
+        'https:'
+    ) {
+      return url.toString();
+    }
+  } catch {
+    return null;
   }
 
   return null;
 }
 
 function extractArticleImages(
-  contentHtml: string | undefined,
+  html?: string,
 ): string[] {
-  if (!contentHtml) {
+  if (!html) {
     return [];
   }
 
-  if (typeof DOMParser === 'undefined') {
+  try {
+    const parser =
+      new DOMParser();
+
+    const document =
+      parser.parseFromString(
+        html,
+        'text/html',
+      );
+
+    const images =
+      Array.from(
+        document.querySelectorAll(
+          'img',
+        ),
+      );
+
+    return images
+      .flatMap(
+        (image) => [
+          image.getAttribute(
+            'src',
+          ),
+          image.getAttribute(
+            'data-src',
+          ),
+          image.getAttribute(
+            'data-original',
+          ),
+          image.getAttribute(
+            'data-lazy-src',
+          ),
+        ],
+      )
+      .map(
+        (value) =>
+          normalizeImageUrl(
+            value ?? undefined,
+          ),
+      )
+      .filter(
+        (
+          value,
+        ): value is string =>
+          Boolean(value),
+      );
+  } catch {
     return [];
   }
-
-  const parser = new DOMParser();
-  const document = parser.parseFromString(
-    contentHtml,
-    'text/html',
-  );
-
-  const images = Array.from(
-    document.querySelectorAll('img'),
-  );
-
-  return images
-    .flatMap((image) => [
-      image.getAttribute('src'),
-      image.getAttribute('data-src'),
-      image.getAttribute('data-original'),
-      image.getAttribute('data-lazy-src'),
-    ])
-    .map((value) =>
-      normalizeImageUrl(value ?? undefined),
-    )
-    .filter(
-      (
-        value,
-      ): value is string =>
-        Boolean(value),
-    );
 }
 
 function getNewsImageCandidates(
   item: GenshinNewsItem,
 ): string[] {
   const candidates = [
-    normalizeImageUrl(item.image),
+    normalizeImageUrl(
+      item.image,
+    ),
     ...extractArticleImages(
       item.content_html,
     ),
-  ].filter(
-    (
-      value,
-    ): value is string =>
-      Boolean(value),
-  );
+  ];
 
   return Array.from(
-    new Set(candidates),
+    new Set(
+      candidates.filter(
+        (
+          value,
+        ): value is string =>
+          Boolean(value),
+      ),
+    ),
   );
 }
 
 function formatNewsDate(
-  value: string | undefined,
+  value?: string,
 ): string {
   if (!value) {
-    return 'Latest news';
+    return '';
   }
 
-  const date = new Date(value);
+  const date =
+    new Date(value);
 
-  if (Number.isNaN(date.getTime())) {
-    return 'Latest news';
+  if (
+    Number.isNaN(
+      date.getTime(),
+    )
+  ) {
+    return '';
   }
 
   return new Intl.DateTimeFormat(
@@ -169,7 +211,9 @@ export function DashboardPage() {
   const [
     news,
     setNews,
-  ] = useState<GenshinNewsItem[]>([]);
+  ] = useState<
+    GenshinNewsItem[]
+  >([]);
 
   const [
     newsIndex,
@@ -195,10 +239,10 @@ export function DashboardPage() {
     let cancelled = false;
 
     async function loadNews() {
-      setNewsLoading(true);
-      setNewsError(false);
-
       try {
+        setNewsLoading(true);
+        setNewsError(false);
+
         const response =
           await fetch(
             NEWS_FEED_URL,
@@ -210,49 +254,50 @@ export function DashboardPage() {
             },
           );
 
-        if (!response.ok) {
+        if (
+          !response.ok
+        ) {
           throw new Error(
-            `News feed returned ${response.status}`,
+            `News request failed: ${response.status}`,
           );
         }
 
         const data =
           (await response.json()) as GenshinNewsFeed;
 
-        const items = Array.isArray(
-          data.items,
-        )
-          ? data.items.filter(
-              (item) =>
-                Boolean(
-                  item.title?.trim(),
-                ) &&
-                Boolean(
-                  item.url?.trim(),
-                ),
-            )
-          : [];
-
         if (cancelled) {
           return;
         }
+
+        const items =
+          Array.isArray(
+            data.items,
+          )
+            ? data.items.filter(
+                (item) =>
+                  Boolean(
+                    item.title,
+                  ) &&
+                  Boolean(
+                    item.url,
+                  ),
+              )
+            : [];
 
         setNews(items);
         setNewsIndex(0);
         setNewsImageIndex(0);
 
-        if (!items.length) {
+        if (
+          !items.length
+        ) {
           setNewsError(true);
         }
       } catch {
-        if (cancelled) {
-          return;
+        if (!cancelled) {
+          setNews([]);
+          setNewsError(true);
         }
-
-        setNews([]);
-        setNewsIndex(0);
-        setNewsImageIndex(0);
-        setNewsError(true);
       } finally {
         if (!cancelled) {
           setNewsLoading(false);
@@ -260,7 +305,7 @@ export function DashboardPage() {
       }
     }
 
-    void loadNews();
+    loadNews();
 
     return () => {
       cancelled = true;
@@ -268,7 +313,9 @@ export function DashboardPage() {
   }, []);
 
   useEffect(() => {
-    if (news.length <= 1) {
+    if (
+      news.length <= 1
+    ) {
       return;
     }
 
@@ -279,8 +326,6 @@ export function DashboardPage() {
             (current + 1) %
             news.length,
         );
-
-        setNewsImageIndex(0);
       }, NEWS_ROTATION_MS);
 
     return () =>
@@ -290,48 +335,48 @@ export function DashboardPage() {
   }, [news.length]);
 
   useEffect(() => {
-    if (
-      newsIndex >=
-      news.length
-    ) {
-      setNewsIndex(0);
-    }
-  }, [
-    newsIndex,
-    news.length,
-  ]);
+    setNewsImageIndex(0);
+  }, [newsIndex]);
 
   const featuredNews =
-    news[newsIndex];
+    news[newsIndex] ??
+    news[0];
 
   const newsImageCandidates =
-    useMemo(() => {
-      if (!featuredNews) {
-        return [];
-      }
-
-      return getNewsImageCandidates(
-        featuredNews,
-      );
-    }, [featuredNews]);
-
-  useEffect(() => {
-    setNewsImageIndex(0);
-  }, [
-    featuredNews?.id,
-    featuredNews?.url,
-    featuredNews?.image,
-  ]);
+    featuredNews
+      ? getNewsImageCandidates(
+          featuredNews,
+        )
+      : [];
 
   const currentNewsImage =
     newsImageCandidates[
       newsImageIndex
     ];
 
+  useEffect(() => {
+    if (
+      newsImageIndex <
+      newsImageCandidates.length
+    ) {
+      return;
+    }
+
+    setNewsImageIndex(0);
+  }, [
+    newsImageIndex,
+    newsImageCandidates.length,
+  ]);
+
   return (
     <div className="home-page">
       {/* Main hero */}
-      <section className="hero-card home-hero">
+      <section
+        className="hero-card home-hero"
+        style={{
+          overflow: 'hidden',
+        }}
+      >
         <div className="home-hero__veil" />
 
         <div className="hero-copy home-hero__copy">
@@ -404,102 +449,191 @@ export function DashboardPage() {
           </div>
         </div>
 
-        <div className="home-hero__art-shell">
-          <div className="home-hero__sun" />
-
-          <div className="hero-rings home-hero__rings">
-            <span />
-            <span />
-            <span />
-          </div>
-
+        {/* Automatic Genshin news */}
+        <div
+          style={{
+            position: 'relative',
+            zIndex: 2,
+            width: '100%',
+            minWidth: 0,
+            alignSelf: 'stretch',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            padding: '24px',
+            boxSizing: 'border-box',
+          }}
+        >
           <div
             style={{
-              position:
-                'absolute',
-              inset: 0,
-              display: 'flex',
-              flexDirection:
-                'column',
-              justifyContent:
-                'flex-end',
+              width: '100%',
+              maxWidth: '680px',
+              minWidth: 0,
+              boxSizing: 'border-box',
               overflow: 'hidden',
-              padding:
-                'clamp(18px, 3vw, 32px)',
+              borderRadius: '2px',
+              background:
+                'rgba(4, 12, 21, 0.72)',
+              border:
+                '1px solid rgba(213, 190, 125, 0.28)',
+              boxShadow:
+                '0 20px 60px rgba(0, 0, 0, 0.28)',
             }}
           >
             {newsLoading ? (
               <div
                 style={{
+                  minHeight:
+                    '320px',
                   display: 'flex',
                   alignItems:
                     'center',
                   justifyContent:
                     'center',
-                  height: '100%',
+                  padding:
+                    '32px 24px',
+                  boxSizing:
+                    'border-box',
+                }}
+              >
+                <span
+                  style={{
+                    color:
+                      'rgba(220, 232, 245, 0.72)',
+                    fontSize:
+                      '0.95rem',
+                  }}
+                >
+                  Loading Genshin News...
+                </span>
+              </div>
+            ) : newsError ||
+              !featuredNews ? (
+              <div
+                style={{
+                  minHeight:
+                    '320px',
+                  display: 'flex',
+                  alignItems:
+                    'center',
+                  justifyContent:
+                    'center',
+                  padding:
+                    '32px 24px',
+                  boxSizing:
+                    'border-box',
                   textAlign:
                     'center',
-                  padding: '24px',
                 }}
               >
                 <div>
-                  <div className="eyebrow">
-                    GENSHIN NEWS
+                  <div
+                    style={{
+                      color:
+                        'rgba(220, 232, 245, 0.9)',
+                      fontSize:
+                        '1.05rem',
+                      marginBottom:
+                        '8px',
+                    }}
+                  >
+                    Genshin News
                   </div>
 
-                  <h2>
-                    Loading latest news…
-                  </h2>
+                  <div
+                    style={{
+                      color:
+                        'rgba(180, 198, 218, 0.68)',
+                      fontSize:
+                        '0.9rem',
+                    }}
+                  >
+                    News is temporarily
+                    unavailable.
+                  </div>
                 </div>
               </div>
-            ) : featuredNews ? (
-              <>
+            ) : (
+              <article
+                style={{
+                  width: '100%',
+                  minWidth: 0,
+                  boxSizing:
+                    'border-box',
+                }}
+              >
                 {currentNewsImage && (
-                  <img
-                    src={
-                      currentNewsImage
-                    }
-                    alt=""
-                    aria-hidden="true"
-                    className="home-hero__character"
-                    onError={() => {
-                      setNewsImageIndex(
-                        (current) =>
-                          current + 1,
-                      );
+                  <div
+                    style={{
+                      width: '100%',
+                      maxWidth: '100%',
+                      overflow: 'hidden',
+                      lineHeight: 0,
+                      background:
+                        'rgba(0, 0, 0, 0.25)',
                     }}
-                  />
+                  >
+                    <img
+                      src={
+                        currentNewsImage
+                      }
+                      alt=""
+                      aria-hidden="true"
+                      style={{
+                        display: 'block',
+                        width: '100%',
+                        height: 'auto',
+                        maxWidth: '100%',
+                        objectFit:
+                          'contain',
+                      }}
+                      onError={() => {
+                        setNewsImageIndex(
+                          (current) =>
+                            current + 1,
+                        );
+                      }}
+                    />
+                  </div>
                 )}
 
                 <div
                   style={{
-                    position:
-                      'absolute',
-                    inset: 0,
-                    background:
-                      'linear-gradient(180deg, rgba(4, 10, 17, 0.02) 25%, rgba(4, 10, 17, 0.82) 100%)',
-                    pointerEvents:
-                      'none',
-                  }}
-                />
-
-                <div
-                  style={{
-                    position:
-                      'relative',
-                    zIndex: 2,
-                    maxWidth:
-                      '720px',
+                    padding:
+                      '22px 24px 24px',
+                    boxSizing:
+                      'border-box',
                   }}
                 >
-                  <div className="eyebrow">
+                  <div
+                    style={{
+                      marginBottom:
+                        '10px',
+                      color:
+                        '#8fb4dc',
+                      fontSize:
+                        '0.78rem',
+                      fontWeight: 600,
+                      letterSpacing:
+                        '0.2em',
+                    }}
+                  >
                     GENSHIN NEWS
                   </div>
 
                   <h2
                     style={{
                       margin:
-                        '6px 0 8px',
+                        '0 0 18px',
+                      color:
+                        '#f2f5f8',
+                      fontSize:
+                        'clamp(1.35rem, 3vw, 2.25rem)',
+                      lineHeight:
+                        1.18,
+                      fontWeight: 600,
+                      overflowWrap:
+                        'anywhere',
                     }}
                   >
                     {featuredNews.title}
@@ -507,91 +641,59 @@ export function DashboardPage() {
 
                   <div
                     style={{
-                      display:
-                        'flex',
+                      display: 'flex',
                       alignItems:
                         'center',
-                      gap: '10px',
                       flexWrap:
                         'wrap',
+                      gap:
+                        '14px',
                     }}
                   >
-                    <small>
-                      {formatNewsDate(
-                        featuredNews.date_published,
-                      )}
-                    </small>
-
-                    {featuredNews.url && (
-                      <a
-                        href={
-                          featuredNews.url
-                        }
-                        target="_blank"
-                        rel="noreferrer"
-                        className="inline-source"
-                        onClick={(event) =>
-                          event.stopPropagation()
-                        }
+                    {featuredNews.date_published && (
+                      <span
+                        style={{
+                          color:
+                            'rgba(220, 232, 245, 0.78)',
+                          fontSize:
+                            '0.9rem',
+                        }}
                       >
-                        Read article
-                        <ExternalLink
-                          size={12}
-                        />
-                      </a>
+                        {formatNewsDate(
+                          featuredNews.date_published,
+                        )}
+                      </span>
                     )}
+
+                    <a
+                      href={
+                        featuredNews.url
+                      }
+                      target="_blank"
+                      rel="noreferrer"
+                      style={{
+                        display:
+                          'inline-flex',
+                        alignItems:
+                          'center',
+                        gap: '6px',
+                        color:
+                          '#9dbdff',
+                        fontSize:
+                          '0.9rem',
+                        textDecoration:
+                          'none',
+                      }}
+                    >
+                      Read article
+                      <ExternalLink
+                        size={14}
+                      />
+                    </a>
                   </div>
                 </div>
-              </>
-            ) : (
-              <div
-                style={{
-                  display: 'flex',
-                  alignItems:
-                    'center',
-                  justifyContent:
-                    'center',
-                  height: '100%',
-                  textAlign:
-                    'center',
-                  padding: '24px',
-                }}
-              >
-                <div>
-                  <div className="eyebrow">
-                    GENSHIN NEWS
-                  </div>
-
-                  <h2>
-                    News is temporarily
-                    unavailable.
-                  </h2>
-
-                  <p>
-                    The live news source
-                    could not be reached.
-                  </p>
-                </div>
-              </div>
+              </article>
             )}
-
-            {newsError &&
-              featuredNews && (
-                <div
-                  style={{
-                    position:
-                      'absolute',
-                    top: '16px',
-                    right: '16px',
-                    zIndex: 3,
-                    fontSize:
-                      '10px',
-                    opacity: 0.65,
-                  }}
-                >
-                  Live feed
-                </div>
-              )}
           </div>
         </div>
       </section>
@@ -716,8 +818,7 @@ export function DashboardPage() {
             <Link
               to="/map"
               style={{
-                display:
-                  'flex',
+                display: 'flex',
                 alignItems:
                   'center',
                 gap: '10px',
@@ -754,8 +855,7 @@ export function DashboardPage() {
             <Link
               to="/guides"
               style={{
-                display:
-                  'flex',
+                display: 'flex',
                 alignItems:
                   'center',
                 gap: '10px',
@@ -792,8 +892,7 @@ export function DashboardPage() {
             <Link
               to="/teams"
               style={{
-                display:
-                  'flex',
+                display: 'flex',
                 alignItems:
                   'center',
                 gap: '10px',
@@ -815,67 +914,4 @@ export function DashboardPage() {
               <strong
                 style={{
                   fontWeight: 500,
-                  whiteSpace:
-                    'nowrap',
-                }}
-              >
-                Make a team
-              </strong>
-
-              <ArrowRight size={13} />
-            </Link>
-          </div>
-        </div>
-      </section>
-
-      {/* Final CTA */}
-      <section
-        className="callout home-callout"
-        style={{
-          display:
-            'flex',
-          alignItems:
-            'center',
-          justifyContent:
-            'space-between',
-          gap: '24px',
-        }}
-      >
-        <div
-          style={{
-            flex: 1,
-          }}
-        >
-          <div className="eyebrow">
-            READY TO BUILD?
-          </div>
-
-          <h3>
-            Pick a character
-            and see everything
-            you need to build
-            them.
-          </h3>
-
-          <p>
-            Check their weapons,
-            artifacts, talents,
-            teams, and materials
-            in one place.
-          </p>
-        </div>
-
-        <Link
-          className="button secondary"
-          to="/characters"
-          style={{
-            flex: '0 0 auto',
-          }}
-        >
-          Browse Characters
-          <ArrowRight size={14} />
-        </Link>
-      </section>
-    </div>
-  );
-}
+                  whiteSpac
