@@ -713,3 +713,699 @@ button:focus-visible, a:focus-visible, input:focus-visible, select:focus-visible
 @media (max-width: 700px) {
   .player-material-row { grid-template-columns: 30px minmax(0, 1fr) auto; }
 }
+/* =========================================
+   PAIMON DASHBOARD COMPANION
+   ========================================= */
+
+.paimon-companion {
+  position: fixed;
+  z-index: 9999;
+
+  width: 190px;
+  height: 190px;
+
+  pointer-events: none;
+
+  transition:
+    left 1800ms cubic-bezier(0.22, 1, 0.36, 1),
+    top 1800ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+.paimon-companion--entering {
+  animation:
+    paimon-pop-in
+    700ms
+    cubic-bezier(0.16, 1, 0.3, 1)
+    both;
+}
+
+.paimon-companion--exiting {
+  animation:
+    paimon-pop-out
+    700ms
+    cubic-bezier(0.7, 0, 0.84, 0)
+    both;
+}
+
+.paimon-companion--exiting
+.paimon-companion__button {
+  pointer-events: none;
+}
+
+@keyframes paimon-pop-in {
+  0% {
+    opacity: 0;
+
+    transform:
+      scale(0)
+      translateY(35px)
+      rotate(-8deg);
+  }
+
+  60% {
+    opacity: 1;
+
+    transform:
+      scale(1.08)
+      translateY(-5px)
+      rotate(3deg);
+  }
+
+  100% {
+    opacity: 1;
+
+    transform:
+      scale(1)
+      translateY(0)
+      rotate(0);
+  }
+}
+
+@keyframes paimon-pop-out {
+  0% {
+    opacity: 1;
+
+    transform:
+      scale(1)
+      translateY(0)
+      rotate(0);
+  }
+
+  35% {
+    opacity: 1;
+
+    transform:
+      scale(1.08)
+      translateY(-8px)
+      rotate(-4deg);
+  }
+
+  100% {
+    opacity: 0;
+
+    transform:
+      scale(0)
+      translateY(40px)
+      rotate(10deg);
+  }
+}
+
+.paimon-companion__button {
+  position: absolute;
+  inset: 0;
+
+  width: 190px;
+  height: 190px;
+
+  padding: 0;
+  border: 0;
+  background: transparent;
+
+  cursor: pointer;
+  pointer-events: auto;
+
+  overflow: visible;
+}
+
+
+/* =========================================
+   SPRITE FRAME
+   ========================================= */
+
+.paimon-companion__sprite {
+  position: absolute;
+
+  left: 50%;
+  top: 50%;
+
+  width: 256px;
+  height: 256px;
+
+  /*
+   * The atlas is:
+   *
+   * 2048 × 2048
+   * 8 × 8 frames
+   * 256 × 256 each
+   */
+  background-image:
+    url('/paimon/spritesheet.png');
+
+  background-repeat: no-repeat;
+
+  background-size:
+    2048px 2048px;
+
+  background-position:
+    0 0;
+
+  /*
+   * Keep the entire 256 × 256 cell visible,
+   * then scale the actual Paimon down.
+   */
+  transform:
+    translate(-50%, -50%)
+    scale(0.58);
+
+  transform-origin:
+    center center;
+
+  will-change:
+    background-position,
+    transform;
+}
+
+
+/* =========================================
+   ROW 0
+   IDLE
+   ========================================= */
+
+.paimon-companion__sprite--idle {
+  animation:
+    paimon-idle
+    1.2s
+    steps(8)
+    infinite;
+}
+
+@keyframes paimon-idle {
+  0% {
+    background-position:
+      0 0;
+
+    transform:
+      translate(-50%, -50%)
+      scale(0.58)
+      translateY(0)
+      rotate(-1deg);
+  }
+
+  50% {
+    background-position:
+      -1024px 0;
+
+    transform:
+      translate(-50%, -50%)
+      scale(0.58)
+      translateY(-7px)
+      rotate(1deg);
+  }
+
+  100% {
+    background-position:
+      -1792px 0;
+
+    transform:
+      translate(-50%, -50%)
+      scale(0.58)
+      translateY(0)
+      rotate(-1deg);
+  }
+}
+
+
+/* =========================================
+   ROW 1
+   FLY RIGHT
+   ========================================= */
+
+.paimon-companion__sprite--running-right {
+  animation:
+    paimon-fly-right
+    900ms
+    steps(8)
+    infinite;
+}
+
+@keyframes paimon-fly-right {
+  0% {
+    background-position:
+      0 -256px;
+
+    transform:
+      translate(-50%, -50%)
+      scale(0.58)
+      translateY(0);
+  }
+
+  50% {
+    background-position:
+      -1024px -256px;
+
+    transform:
+      translate(-50%, -50%)
+      scale(0.58)
+      translateY(-5px);
+  }
+
+  100% {
+    background-position:
+      -1792px -256px;
+
+    transform:
+      translate(-50%, -50%)
+      scale(0.58)
+      translateY(0);
+  }
+}
+
+
+/* =========================================
+   ROW 2
+   FLY LEFT
+   ========================================= */
+
+.paimon-companion__sprite--running-left {
+  animation:
+    paimon-fly-left
+    900ms
+    steps(8)
+    infinite;
+}
+
+@keyframes paimon-fly-left {
+  0% {
+    background-position:
+      0 -512px;
+
+    transform:
+      translate(-50%, -50%)
+      scale(0.58)
+      translateY(0);
+  }
+
+  50% {
+    background-position:
+      -1024px -512px;
+
+    transform:
+      translate(-50%, -50%)
+      scale(0.58)
+      translateY(-5px);
+  }
+
+  100% {
+    background-position:
+      -1792px -512px;
+
+    transform:
+      translate(-50%, -50%)
+      scale(0.58)
+      translateY(0);
+  }
+}
+
+
+/* =========================================
+   ROW 3
+   WAVE
+   ========================================= */
+
+.paimon-companion__sprite--waving {
+  animation:
+    paimon-wave
+    900ms
+    steps(8)
+    infinite;
+}
+
+@keyframes paimon-wave {
+  0% {
+    background-position:
+      0 -768px;
+
+    transform:
+      translate(-50%, -50%)
+      scale(0.58)
+      translateY(0)
+      rotate(-2deg);
+  }
+
+  50% {
+    background-position:
+      -1024px -768px;
+
+    transform:
+      translate(-50%, -50%)
+      scale(0.58)
+      translateY(-5px)
+      rotate(2deg);
+  }
+
+  100% {
+    background-position:
+      -1792px -768px;
+
+    transform:
+      translate(-50%, -50%)
+      scale(0.58)
+      translateY(0)
+      rotate(-2deg);
+  }
+}
+
+
+/* =========================================
+   ROW 4
+   JUMP / EXCITED
+   ========================================= */
+
+.paimon-companion__sprite--jumping {
+  animation:
+    paimon-jump
+    750ms
+    steps(8)
+    1;
+}
+
+@keyframes paimon-jump {
+  0% {
+    background-position:
+      0 -1024px;
+
+    transform:
+      translate(-50%, -50%)
+      scale(0.58)
+      translateY(0);
+  }
+
+  40% {
+    background-position:
+      -1024px -1024px;
+
+    transform:
+      translate(-50%, -50%)
+      scale(0.58)
+      translateY(-18px);
+  }
+
+  70% {
+    background-position:
+      -1536px -1024px;
+
+    transform:
+      translate(-50%, -50%)
+      scale(0.58)
+      translateY(-10px);
+  }
+
+  100% {
+    background-position:
+      -1792px -1024px;
+
+    transform:
+      translate(-50%, -50%)
+      scale(0.58)
+      translateY(0);
+  }
+}
+
+
+/* =========================================
+   ROW 5
+   ANGRY
+   ========================================= */
+
+.paimon-companion__sprite--failed {
+  animation:
+    paimon-angry
+    900ms
+    steps(8)
+    infinite;
+}
+
+@keyframes paimon-angry {
+  0% {
+    background-position:
+      0 -1280px;
+
+    transform:
+      translate(-50%, -50%)
+      scale(0.58)
+      translateX(0)
+      rotate(0);
+  }
+
+  25% {
+    background-position:
+      -512px -1280px;
+
+    transform:
+      translate(-50%, -50%)
+      scale(0.58)
+      translateX(-5px)
+      rotate(-3deg);
+  }
+
+  50% {
+    background-position:
+      -1024px -1280px;
+
+    transform:
+      translate(-50%, -50%)
+      scale(0.58)
+      translateX(0)
+      rotate(0);
+  }
+
+  75% {
+    background-position:
+      -1536px -1280px;
+
+    transform:
+      translate(-50%, -50%)
+      scale(0.58)
+      translateX(5px)
+      rotate(3deg);
+  }
+
+  100% {
+    background-position:
+      -1792px -1280px;
+
+    transform:
+      translate(-50%, -50%)
+      scale(0.58)
+      translateX(0)
+      rotate(0);
+  }
+}
+
+
+/* =========================================
+   ROW 6
+   SAD / TIRED / WAITING
+   ========================================= */
+
+.paimon-companion__sprite--waiting {
+  animation:
+    paimon-waiting
+    1.6s
+    steps(8)
+    infinite;
+}
+
+@keyframes paimon-waiting {
+  0% {
+    background-position:
+      0 -1536px;
+
+    transform:
+      translate(-50%, -50%)
+      scale(0.58)
+      translateY(0);
+  }
+
+  50% {
+    background-position:
+      -1024px -1536px;
+
+    transform:
+      translate(-50%, -50%)
+      scale(0.58)
+      translateY(4px);
+  }
+
+  100% {
+    background-position:
+      -1792px -1536px;
+
+    transform:
+      translate(-50%, -50%)
+      scale(0.58)
+      translateY(0);
+  }
+}
+
+
+/* =========================================
+   ROW 7
+   READ / THINK
+   ========================================= */
+
+.paimon-companion__sprite--review {
+  animation:
+    paimon-review
+    1.4s
+    steps(8)
+    infinite;
+}
+
+@keyframes paimon-review {
+  0% {
+    background-position:
+      0 -1792px;
+
+    transform:
+      translate(-50%, -50%)
+      scale(0.58)
+      translateY(0);
+  }
+
+  50% {
+    background-position:
+      -1024px -1792px;
+
+    transform:
+      translate(-50%, -50%)
+      scale(0.58)
+      translateY(-4px);
+  }
+
+  100% {
+    background-position:
+      -1792px -1792px;
+
+    transform:
+      translate(-50%, -50%)
+      scale(0.58)
+      translateY(0);
+  }
+}
+
+
+/* =========================================
+   HOVER
+   ========================================= */
+
+.paimon-companion__button:hover
+.paimon-companion__sprite {
+  filter:
+    drop-shadow(0 8px 15px rgba(255, 255, 255, 0.12));
+}
+
+
+/* =========================================
+   SPEECH
+   ========================================= */
+
+.paimon-companion__speech {
+  position: absolute;
+
+  left: 50%;
+  bottom: calc(100% - 4px);
+
+  transform:
+    translateX(-50%);
+
+  width: max-content;
+  max-width: 220px;
+
+  padding: 8px 12px;
+
+  border:
+    1px solid rgba(255, 255, 255, 0.2);
+
+  border-radius: 12px;
+
+  background:
+    rgba(7, 17, 28, 0.94);
+
+  color: #fff;
+
+  font-size: 12px;
+  line-height: 1.4;
+
+  text-align: center;
+
+  box-shadow:
+    0 10px 25px rgba(0, 0, 0, 0.25);
+
+  pointer-events: none;
+
+  animation:
+    paimon-speech-in
+    350ms
+    ease
+    forwards;
+}
+
+.paimon-companion__speech::after {
+  content: '';
+
+  position: absolute;
+
+  left: 50%;
+  bottom: -7px;
+
+  width: 12px;
+  height: 12px;
+
+  transform:
+    translateX(-50%)
+    rotate(45deg);
+
+  border-right:
+    1px solid rgba(255, 255, 255, 0.2);
+
+  border-bottom:
+    1px solid rgba(255, 255, 255, 0.2);
+
+  background:
+    rgba(7, 17, 28, 0.94);
+}
+
+@keyframes paimon-speech-in {
+  from {
+    opacity: 0;
+
+    transform:
+      translate(-50%, 8px);
+  }
+
+  to {
+    opacity: 1;
+
+    transform:
+      translate(-50%, 0);
+  }
+}
+
+
+/* =========================================
+   MOBILE
+   ========================================= */
+
+@media (max-width: 700px) {
+  .paimon-companion {
+    width: 160px;
+    height: 160px;
+  }
+
+  .paimon-companion__button {
+    width: 160px;
+    height: 160px;
+  }
+
+  .paimon-companion__sprite {
+    transform:
+      translate(-50%, -50%)
+      scale(0.48);
+  }
+
+  .paimon-companion__speech {
+    max-width: 170px;
+    font-size: 11px;
+  }
+}
