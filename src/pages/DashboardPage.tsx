@@ -349,6 +349,7 @@ export function DashboardPage() {
                   <div
                     style={{
                       width: '100%',
+                      aspectRatio: '16 / 7',
                       maxWidth: '100%',
                       overflow: 'hidden',
                       lineHeight: 0,
@@ -362,9 +363,10 @@ export function DashboardPage() {
                       style={{
                         display: 'block',
                         width: '100%',
-                        height: 'auto',
+                        height: '100%',
                         maxWidth: '100%',
-                        objectFit: 'contain',
+                        objectFit: 'cover',
+                        objectPosition: 'center',
                       }}
                       onError={() => {
                         setNewsImageIndex((current) => current + 1);
@@ -660,4 +662,4 @@ export function DashboardPage() {
       </section>
     </div>
   );
-              }
+                  }
