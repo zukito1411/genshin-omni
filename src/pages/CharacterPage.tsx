@@ -6,6 +6,7 @@ import { assetKey, characterImageSources, elementImageSources, entityImageSource
 import { fetchCharacter, fetchEntity, fetchStats } from '../api/genshinDb';
 import { fetchPlayerGuide, type LivePlayerGuide } from '../api/playerGuide';
 import { AsyncImage } from '../components/AsyncImage';
+import { usePaimonContext } from '../components/PaimonCompanion';
 import { SectionTitle } from '../components/SectionTitle';
 import { useCharacters } from '../hooks/useCharacters';
 import { slugify } from '../utils/normalize';
@@ -191,6 +192,7 @@ export function CharacterPage() {
   const { id = '' } = useParams();
   const [searchParams, setSearchParams] = useSearchParams();
   const { allCharacters } = useCharacters('');
+  const { setContext: setPaimonContext } = usePaimonContext();
   const isTraveler = /^traveler$/i.test(id);
   const travelerElement = travelerElementFrom(searchParams.get('element'));
   const activeCharacterQuery = isTraveler ? `traveler-${travelerElement.toLowerCase()}` : id;
@@ -344,6 +346,33 @@ export function CharacterPage() {
     };
   }, [selectedRecommendation]);
 
+  const displayName = isTraveler
+    ? `${travelerElement} Traveler`
+    : character?.name ?? id;
+
+  useEffect(() => {
+    if (!character) return;
+
+    if (selectedRecommendation) {
+      setPaimonContext({
+        page: selectedRecommendationType === 'weapons' ? 'weapon' : 'artifact',
+        name: selectedRecommendation.name,
+      });
+      return;
+    }
+
+    setPaimonContext({
+      page: 'character',
+      name: displayName,
+    });
+  }, [
+    character,
+    displayName,
+    selectedRecommendation,
+    selectedRecommendationType,
+    setPaimonContext,
+  ]);
+
   if (loading) return <div className="detail-loading"><div className="skeleton-hero" /><div className="skeleton-line" /><div className="skeleton-line short" /></div>;
   if (error || !character) return <div className="error-box"><h2>Character unavailable</h2><p>{error ?? 'No character data was returned.'}</p><Link to="/characters" className="button secondary">Back to character library</Link></div>;
 
@@ -357,7 +386,6 @@ export function CharacterPage() {
   const guideSources = sourceLinksForGuide(guide);
   const imageSources = characterImageSources(character, 'portrait');
   const characterId = activeCharacterQuery;
-  const displayName = isTraveler ? `${travelerElement} Traveler` : character.name;
 
   function selectTravelerElement(element: TravelerElement) {
     const next = new URLSearchParams(searchParams);

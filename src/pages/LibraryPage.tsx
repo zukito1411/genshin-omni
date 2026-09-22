@@ -4,6 +4,7 @@ import { fetchEntity, fetchFolderEntities, fetchStats } from '../api/genshinDb';
 import { assetKey, entityImageSources, genshinBuildsMaterialImage } from '../api/genshinDev';
 import { SectionTitle } from '../components/SectionTitle';
 import { AsyncImage } from '../components/AsyncImage';
+import { usePaimonContext } from '../components/PaimonCompanion';
 import { extractMaterials, formatValue } from '../utils/genshin';
 import type { LibraryEntity } from '../types/genshin';
 
@@ -161,6 +162,7 @@ export function LibraryPage({
 }) {
   const [items, setItems] = useState<LibraryEntity[]>([]);
   const [search, setSearch] = useState('');
+  const { setContext: setPaimonContext } = usePaimonContext();
   const [rarity, setRarity] = useState('All');
   const [selected, setSelected] = useState<LibraryEntity | null>(null);
   const [loading, setLoading] = useState(true);
@@ -177,6 +179,21 @@ export function LibraryPage({
   const [materialEntities, setMaterialEntities] = useState<
     Record<string, LibraryEntity>
   >({});
+
+  useEffect(() => {
+    if (folder === 'weapons') {
+      setPaimonContext({
+        page: selected ? 'weapon' : 'weapons',
+        name: selected?.name,
+      });
+      return;
+    }
+
+    setPaimonContext({
+      page: selected ? 'artifact' : 'artifacts',
+      name: selected?.name,
+    });
+  }, [folder, selected, setPaimonContext]);
 
   // Lock the page behind the drawer while keeping the drawer scrollable.
   useEffect(() => {

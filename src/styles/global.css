@@ -727,8 +727,8 @@ button:focus-visible, a:focus-visible, input:focus-visible, select:focus-visible
   pointer-events: none;
 
   transition:
-    left 1800ms cubic-bezier(0.22, 1, 0.36, 1),
-    top 1800ms cubic-bezier(0.22, 1, 0.36, 1);
+    left 3200ms cubic-bezier(0.22, 1, 0.36, 1),
+    top 3200ms cubic-bezier(0.22, 1, 0.36, 1);
 }
 
 
@@ -1209,6 +1209,170 @@ button:focus-visible, a:focus-visible, input:focus-visible, select:focus-visible
 
 
 /* =========================================
+   PAIMON SPARKLE TRAIL
+   ========================================= */
+
+.paimon-companion__sparkle-trail {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  overflow: visible;
+  z-index: 0;
+}
+
+.paimon-companion__sparkle {
+  position: absolute;
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.95);
+  box-shadow:
+    0 0 5px rgba(255, 255, 255, 0.95),
+    0 0 11px rgba(169, 220, 255, 0.75);
+  opacity: 0;
+  transform: scale(0.35) rotate(45deg);
+}
+
+.paimon-companion__sparkle::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  background: rgba(255, 255, 255, 0.95);
+  box-shadow: 0 0 8px rgba(255, 255, 255, 0.9);
+  transform: rotate(45deg) scale(0.7);
+}
+
+.paimon-companion__sparkle-trail--right .paimon-companion__sparkle:nth-child(1) {
+  left: 21%;
+  top: 56%;
+  animation: paimon-sparkle-right 560ms ease-out infinite;
+}
+
+.paimon-companion__sparkle-trail--right .paimon-companion__sparkle:nth-child(2) {
+  left: 28%;
+  top: 66%;
+  animation: paimon-sparkle-right 610ms ease-out infinite;
+}
+
+.paimon-companion__sparkle-trail--right .paimon-companion__sparkle:nth-child(3) {
+  left: 34%;
+  top: 48%;
+  animation: paimon-sparkle-right 650ms ease-out infinite;
+}
+
+.paimon-companion__sparkle-trail--right .paimon-companion__sparkle:nth-child(4) {
+  left: 40%;
+  top: 72%;
+  animation: paimon-sparkle-right 590ms ease-out infinite;
+}
+
+.paimon-companion__sparkle-trail--right .paimon-companion__sparkle:nth-child(5) {
+  left: 46%;
+  top: 40%;
+  animation: paimon-sparkle-right 670ms ease-out infinite;
+}
+
+.paimon-companion__sparkle-trail--right .paimon-companion__sparkle:nth-child(6) {
+  left: 30%;
+  top: 82%;
+  animation: paimon-sparkle-right 620ms ease-out infinite;
+}
+
+.paimon-companion__sparkle-trail--right .paimon-companion__sparkle:nth-child(7) {
+  left: 52%;
+  top: 60%;
+  animation: paimon-sparkle-right 700ms ease-out infinite;
+}
+
+.paimon-companion__sparkle-trail--left .paimon-companion__sparkle:nth-child(1) {
+  left: 79%;
+  top: 56%;
+  animation: paimon-sparkle-left 560ms ease-out infinite;
+}
+
+.paimon-companion__sparkle-trail--left .paimon-companion__sparkle:nth-child(2) {
+  left: 72%;
+  top: 66%;
+  animation: paimon-sparkle-left 610ms ease-out infinite;
+}
+
+.paimon-companion__sparkle-trail--left .paimon-companion__sparkle:nth-child(3) {
+  left: 66%;
+  top: 48%;
+  animation: paimon-sparkle-left 650ms ease-out infinite;
+}
+
+.paimon-companion__sparkle-trail--left .paimon-companion__sparkle:nth-child(4) {
+  left: 60%;
+  top: 72%;
+  animation: paimon-sparkle-left 590ms ease-out infinite;
+}
+
+.paimon-companion__sparkle-trail--left .paimon-companion__sparkle:nth-child(5) {
+  left: 54%;
+  top: 40%;
+  animation: paimon-sparkle-left 670ms ease-out infinite;
+}
+
+.paimon-companion__sparkle-trail--left .paimon-companion__sparkle:nth-child(6) {
+  left: 70%;
+  top: 82%;
+  animation: paimon-sparkle-left 620ms ease-out infinite;
+}
+
+.paimon-companion__sparkle-trail--left .paimon-companion__sparkle:nth-child(7) {
+  left: 48%;
+  top: 60%;
+  animation: paimon-sparkle-left 700ms ease-out infinite;
+}
+
+@keyframes paimon-sparkle-right {
+  0% {
+    opacity: 0;
+    transform: translate(18px, 0) scale(0.25) rotate(45deg);
+  }
+
+  20% {
+    opacity: 0.95;
+    transform: translate(8px, -2px) scale(0.95) rotate(45deg);
+  }
+
+  65% {
+    opacity: 0.65;
+    transform: translate(-10px, 4px) scale(0.7) rotate(45deg);
+  }
+
+  100% {
+    opacity: 0;
+    transform: translate(-24px, 10px) scale(0.05) rotate(45deg);
+  }
+}
+
+@keyframes paimon-sparkle-left {
+  0% {
+    opacity: 0;
+    transform: translate(-18px, 0) scale(0.25) rotate(45deg);
+  }
+
+  20% {
+    opacity: 0.95;
+    transform: translate(-8px, -2px) scale(0.95) rotate(45deg);
+  }
+
+  65% {
+    opacity: 0.65;
+    transform: translate(10px, 4px) scale(0.7) rotate(45deg);
+  }
+
+  100% {
+    opacity: 0;
+    transform: translate(24px, 10px) scale(0.05) rotate(45deg);
+  }
+}
+
+
+/* =========================================
    HOVER
    ========================================= */
 
@@ -1330,5 +1494,50 @@ button:focus-visible, a:focus-visible, input:focus-visible, select:focus-visible
   .paimon-companion__speech {
     max-width: 170px;
     font-size: 11px;
+  }
+}
+
+/* =========================================
+   PAIMON TOGGLE ON MOBILE
+   ========================================= */
+
+@media (max-width: 640px) {
+  .topbar-actions {
+    display: flex;
+    align-items: center;
+    flex: 0 0 auto;
+  }
+
+  .topbar-actions .paimon-toggle {
+    width: 36px;
+    height: 36px;
+    min-width: 36px;
+    padding: 0;
+    display: grid;
+    place-items: center;
+
+    border: 1px solid var(--line);
+    border-radius: 10px;
+
+    background: rgba(255, 255, 255, 0.025);
+    color: var(--muted);
+
+    cursor: pointer;
+  }
+
+  .topbar-actions .paimon-toggle:hover {
+    color: #fff;
+    background: rgba(255, 255, 255, 0.06);
+  }
+
+  .topbar-actions .paimon-toggle svg {
+    width: 16px;
+    height: 16px;
+  }
+
+  .global-search {
+    flex: 1;
+    min-width: 0;
+    max-width: none;
   }
 }
