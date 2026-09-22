@@ -155,6 +155,28 @@ function weaponUpgradeMaterials(entity: LibraryEntity): MaterialRef[] {
   return extractMaterials(entity.raw).filter((material) => material.name.toLowerCase() !== entity.name.toLowerCase());
 }
 
+function weaponRefinementDescriptions(entity: LibraryEntity): Record<string, string> {
+  const raw = entity.raw && typeof entity.raw === 'object'
+    ? entity.raw as Record<string, unknown>
+    : {};
+
+  const refinements: Record<string, string> = {};
+
+  for (const level of ['r1', 'r2', 'r3', 'r4', 'r5']) {
+    const value = raw[level];
+
+    if (!value || typeof value !== 'object') continue;
+
+    const record = value as Record<string, unknown>;
+
+    if (typeof record.description === 'string' && record.description.trim()) {
+      refinements[level] = record.description.trim();
+    }
+  }
+
+  return refinements;
+}
+
 function formatWeaponSecondary(value: unknown, stat?: string, example?: string): string {
   const numeric = typeof value === 'number' ? value : Number(value);
   if (!Number.isFinite(numeric)) return formatValue(value);
@@ -189,6 +211,7 @@ export function CharacterPage() {
   const [selectedRecommendationType, setSelectedRecommendationType] = useState<'weapons' | 'artifacts' | null>(null);
   const [weaponProgressions, setWeaponProgressions] = useState<Record<string, Record<string, unknown>>>({});
   const [weaponProgressionLoading, setWeaponProgressionLoading] = useState(false);
+  const [selectedWeaponRefinementLevel, setSelectedWeaponRefinementLevel] = useState('r1');
 
   useEffect(() => {
     const controller = new AbortController();
@@ -351,9 +374,14 @@ export function CharacterPage() {
   function openRecommendation(type: 'weapons' | 'artifacts', entity: LibraryEntity) {
     setSelectedRecommendation(entity);
     setSelectedRecommendationType(type);
+
     if (type !== 'weapons') return;
+
+    setSelectedWeaponRefinementLevel('r1');
+
     const key = catalogName(entity.name);
     if (weaponProgressions[key]) return;
+
     setWeaponProgressionLoading(true);
     fetchStats('weapons', key)
       .then((stats) => setWeaponProgressions((current) => ({ ...current, [key]: stats })))
@@ -365,6 +393,14 @@ export function CharacterPage() {
   const selectedWeaponStats = selectedWeapon ? weaponProgressions[catalogName(selectedWeapon.name)] ?? {} : {};
   const selectedWeaponRows = selectedWeapon ? weaponProgressionRows(selectedWeaponStats) : [];
   const selectedWeaponMaterials = selectedWeapon ? weaponUpgradeMaterials(selectedWeapon) : [];
+  const selectedWeaponRefinements = selectedWeapon
+    ? weaponRefinementDescriptions(selectedWeapon)
+    : {};
+
+  const selectedWeaponRefinement =
+    selectedWeaponRefinements[selectedWeaponRefinementLevel]
+    ?? selectedWeaponRefinements.r1
+    ?? '';
 
   return <div className="character-page">
     <Link to="/characters" className="back-link">↩ Character library</Link>
@@ -469,7 +505,34 @@ export function CharacterPage() {
         {selectedWeapon ? <>
           <div className="build-stat-grid"><div><span>Base ATK (Lv. 1)</span><strong>{selectedWeapon.baseAttack ?? 'N/A'}</strong></div><div><span>Secondary stat</span><strong>{selectedWeapon.secondaryStat ?? 'N/A'}</strong></div><div><span>Value</span><strong>{selectedWeapon.secondaryValue ?? 'N/A'}</strong></div></div>
           {selectedWeapon.effectName && <h3>{selectedWeapon.effectName}</h3>}
-          <p>{selectedWeapon.description ?? 'The weapon passive description is not exposed by the current data source.'}</p>
+
+          {Object.keys(selectedWeaponRefinements).length > 0 && (
+            <div className="tabs weapon-refinement-tabs">
+              {['r1', 'r2', 'r3', 'r4', 'r5']
+                .filter((level) => selectedWeaponRefinements[level])
+                .map((level) => (
+                  <button
+                    key={level}
+                    className={selectedWeaponRefinementLevel === level ? 'tab active' : 'tab'}
+                    onClick={() => setSelectedWeaponRefinementLevel(level)}
+                  >
+                    {level.toUpperCase()}
+                  </button>
+                ))}
+            </div>
+          )}
+
+          <p>
+            {selectedWeaponRefinement ||
+              'The weapon passive description is not exposed by the current data source.'}
+          </p>
+
+          {selectedWeapon.description && (
+            <div className="drawer-section">
+              <div className="eyebrow">DESCRIPTION</div>
+              <p>{selectedWeapon.description}</p>
+            </div>
+          )}
           <div className="drawer-section"><div className="eyebrow">PROGRESSION</div><h3>Weapon stats by level</h3>{selectedWeaponRows.length ? <div className="stat-table-wrap"><table className="stat-table"><thead><tr><th>Level</th><th>Base ATK</th><th>{selectedWeapon.secondaryStat ?? 'Secondary stat'}</th></tr></thead><tbody>{selectedWeaponRows.map((row) => <tr key={row.level}><td>{row.level}</td><td>{formatValue(row.attack)}</td><td>{formatWeaponSecondary(row.secondary, selectedWeapon.secondaryStat, selectedWeapon.secondaryValue)}</td></tr>)}</tbody></table></div> : <p className="muted">{weaponProgressionLoading ? 'Loading weapon progression…' : 'Level-by-level stats are not available from the current source.'}</p>}</div>
           <div className="drawer-section"><div className="eyebrow">ASCENSION</div><h3>Upgrade materials</h3>{selectedWeaponMaterials.length ? <div className="material-table weapon-material-table">{selectedWeaponMaterials.map((material) => <div className="material-row player-material-row" key={material.name}><MaterialImage name={material.name} /><span><strong>{material.name}</strong>{material.category && <small>{material.category}</small>}</span><strong>{material.amount ?? '—'}</strong></div>)}</div> : <p className="muted">Upgrade requirements are not available from the current source.</p>}</div>
         </> : <>
