@@ -7,62 +7,329 @@ import { useCharacters } from '../hooks/useCharacters';
 
 export function DashboardPage() {
   const { allCharacters, loading } = useCharacters('');
-  const favorites = allCharacters.filter((character) => localStorage.getItem(`favorite:${character.id}`) === '1').slice(0, 6);
+
+  const favorites = allCharacters
+    .filter((character) => localStorage.getItem(`favorite:${character.id}`) === '1')
+    .slice(0, 6);
+
   const featured = favorites[0] ?? allCharacters[0];
-  const featuredImages = featured ? characterImageSources(featured, 'portrait') : [];
 
-  return <div className="home-page">
-    <section className="hero-card home-hero">
-      <div className="home-hero__veil" />
-      <div className="hero-copy home-hero__copy">
-        <div className="eyebrow hero-eyebrow"><Sparkles size={13} /> TEYVAT ATLAS · ADVENTURER'S COMPANION</div>
-        <div className="hero-kicker">GENSHIN IMPACT PLAYER JOURNAL</div>
-        <h1>Your Teyvat adventure, all in one place.</h1>
-        <p className="hero-description">Build your characters, plan materials, assemble teams, browse weapons and artifacts, and explore the world without leaving your Atlas.</p>
-        <div className="hero-actions">
-          <Link to="/characters" className="button primary">Open Character Archive <ArrowRight size={15} /></Link>
-          <Link to="/teams" className="button secondary">Forge a Team</Link>
-        </div>
-        <div className="hero-stats">
-          <div><strong>{loading ? '—' : allCharacters.length}</strong><span>characters in the archive</span></div>
-          <div><strong>7</strong><span>elements of Teyvat</span></div>
-          <div><strong>∞</strong><span>builds to explore</span></div>
-        </div>
-      </div>
-      <div className="home-hero__art-shell">
-        <div className="home-hero__sun" />
-        <div className="hero-rings home-hero__rings"><span /><span /><span /></div>
-        {featured && <AsyncImage src={featuredImages} alt={featured.name} className="home-hero__character" assetKey={assetKey('characters', featured.id || featured.name)} />}
-        <div className="home-hero__caption">
-          <span>{featured ? featured.name : 'Teyvat Atlas'}</span>
-          <small>{featured ? `${featured.element ?? 'Unknown'} · ${featured.weapon ?? 'Adventurer'}` : 'Your personal adventure journal'}</small>
-        </div>
-      </div>
-    </section>
+  const featuredImages = featured
+    ? characterImageSources(featured, 'portrait')
+    : [];
 
-    <section className="section-block home-tools">
-      <SectionTitle eyebrow="THE ADVENTURER'S HANDBOOK" title="Everything you need before you set out." description="Built around the things a player actually wants to know: what to build, what to farm, who to pair, and where to go next." />
-      <div className="feature-grid four">
-        <Link to="/characters" className="feature-card feature-card--character"><Users /><h3>Characters</h3><p>Open any character and see their full player guide, build, materials and team options.</p><span>Open archive <ArrowRight size={13} /></span></Link>
-        <Link to="/weapons" className="feature-card feature-card--weapon"><Swords /><h3>Weapons</h3><p>Compare weapons, stats and usable options for the characters you own.</p><span>Browse weapons <ArrowRight size={13} /></span></Link>
-        <Link to="/artifacts" className="feature-card feature-card--artifact"><Boxes /><h3>Artifacts</h3><p>Browse sets, bonuses and the characters that can put them to work.</p><span>Browse sets <ArrowRight size={13} /></span></Link>
-        <Link to="/teams" className="feature-card feature-card--team"><BookOpen /><h3>Team Builder</h3><p>Assemble four-character squads and keep your favorite compositions on this device.</p><span>Forge a team <ArrowRight size={13} /></span></Link>
-      </div>
-    </section>
+  return (
+    <div className="home-page">
+      {/* Main hero */}
+      <section className="hero-card home-hero">
+        <div className="home-hero__veil" />
 
-    <section className="section-block two-up home-panels">
-      <section className="panel home-panel home-panel--favorites">
-        <div className="panel-ornament" />
-        <SectionTitle eyebrow="YOUR JOURNAL" title="Saved characters" description="Keep the characters you care about one tap away." />
-        {favorites.length ? <div className="mini-character-list">{favorites.map((character) => <Link to={`/characters/${encodeURIComponent(character.id)}`} key={character.id}><span>{character.name}</span><small>{character.element} · {character.weapon}</small></Link>)}</div> : <div className="empty-state home-empty">Save characters from their detail pages and they will appear here.</div>}
+        <div className="hero-copy home-hero__copy">
+          <div className="eyebrow hero-eyebrow">
+            <Sparkles size={13} />
+            TEYVAT ATLAS
+          </div>
+
+          <div className="hero-kicker">
+            GENSHIN IMPACT COMPANION
+          </div>
+
+          <h1>
+            Build your characters. Plan your adventure.
+          </h1>
+
+          <p className="hero-description">
+            Find builds, weapons, artifacts, teams, materials, and more in one place.
+          </p>
+
+          <div className="hero-actions">
+            <Link to="/characters" className="button primary">
+              Browse Characters
+              <ArrowRight size={15} />
+            </Link>
+
+            <Link to="/teams" className="button secondary">
+              Build a Team
+            </Link>
+          </div>
+
+          <div className="hero-stats">
+            <div>
+              <strong>{loading ? '—' : allCharacters.length}</strong>
+              <span>characters</span>
+            </div>
+
+            <div>
+              <strong>7</strong>
+              <span>elements</span>
+            </div>
+
+            <div>
+              <strong>∞</strong>
+              <span>builds to explore</span>
+            </div>
+          </div>
+        </div>
+
+        <div className="home-hero__art-shell">
+          <div className="home-hero__sun" />
+
+          <div className="hero-rings home-hero__rings">
+            <span />
+            <span />
+            <span />
+          </div>
+
+          {featured && (
+            <AsyncImage
+              src={featuredImages}
+              alt={featured.name}
+              className="home-hero__character"
+              assetKey={assetKey(
+                'characters',
+                featured.id || featured.name,
+              )}
+            />
+          )}
+
+          <div className="home-hero__caption">
+            <span>
+              {featured ? featured.name : 'Teyvat Atlas'}
+            </span>
+
+            <small>
+              {featured
+                ? `${featured.element ?? 'Unknown'} · ${featured.weapon ?? 'Character'}`
+                : 'Your Genshin companion'}
+            </small>
+          </div>
+        </div>
       </section>
-      <section className="panel home-panel home-panel--sources">
-        <div className="panel-ornament" />
-        <SectionTitle eyebrow="ATLAS SOURCES" title="A living game library" description="The Atlas combines live game data with player-facing guide sources instead of hiding the data behind developer screens." />
-        <div className="health-list"><div><Compass size={15} /><span>Game data</span><strong>GenshinDB</strong></div><div><Compass size={15} /><span>Character media</span><strong>genshin.dev</strong></div><div><Compass size={15} /><span>Community builds</span><strong>Public guide sources</strong></div></div>
-      </section>
-    </section>
 
-    <section className="callout home-callout"><div><div className="eyebrow">ADVENTURE READY</div><h3>Stop jumping between tabs. Keep your builds, teams and character notes together.</h3><p>Open a character, follow their build, review their materials, then save the team you want to try.</p></div><Link className="button secondary" to="/characters">Start with a character <ArrowRight size={14} /></Link></section>
-  </div>;
+      {/* Main tools */}
+      <section className="section-block home-tools">
+        <SectionTitle
+          eyebrow="EXPLORE"
+          title="What do you want to do?"
+          description="Find a character, check a build, prepare materials, or put together a team."
+        />
+
+        <div className="feature-grid four">
+          <Link
+            to="/characters"
+            className="feature-card feature-card--character"
+          >
+            <Users />
+
+            <h3>Characters</h3>
+
+            <p>
+              See builds, stats, talents, teams, and materials for every character.
+            </p>
+
+            <span>
+              Browse characters
+              <ArrowRight size={13} />
+            </span>
+          </Link>
+
+          <Link
+            to="/weapons"
+            className="feature-card feature-card--weapon"
+          >
+            <Swords />
+
+            <h3>Weapons</h3>
+
+            <p>
+              Check weapon stats and find weapons that fit your characters.
+            </p>
+
+            <span>
+              Browse weapons
+              <ArrowRight size={13} />
+            </span>
+          </Link>
+
+          <Link
+            to="/artifacts"
+            className="feature-card feature-card--artifact"
+          >
+            <Boxes />
+
+            <h3>Artifacts</h3>
+
+            <p>
+              Check artifact sets, bonuses, and which characters use them.
+            </p>
+
+            <span>
+              Browse artifacts
+              <ArrowRight size={13} />
+            </span>
+          </Link>
+
+          <Link
+            to="/teams"
+            className="feature-card feature-card--team"
+          >
+            <BookOpen />
+
+            <h3>Team Builder</h3>
+
+            <p>
+              Put four characters together and save the teams you want to try.
+            </p>
+
+            <span>
+              Build a team
+              <ArrowRight size={13} />
+            </span>
+          </Link>
+        </div>
+      </section>
+
+      {/* Saved characters and quick access */}
+      <br></br>
+        <section className="panel home-panel home-panel--sources">
+          <div className="panel-ornament" />
+
+          <SectionTitle
+            eyebrow="QUICK ACCESS"
+            title="Keep playing"
+            description="Jump straight to the tools you need."
+          />
+
+          <div className="health-list">
+            {/* Keep the existing div structure so the current CSS still applies. */}
+
+            <div>
+              <Link
+                to="/map"
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '10px',
+                  width: '100%',
+                  textDecoration: 'none',
+                }}
+              >
+                <Compass size={15} />
+
+                <span style={{ flex: 1 }}>
+                  Map
+                </span>
+
+                <strong
+                  style={{
+                    fontWeight: 500,
+                    whiteSpace: 'nowrap',
+                  }}
+                >
+                  Find resources
+                </strong>
+
+                <ArrowRight size={13} />
+              </Link>
+            </div>
+
+            <div>
+              <Link
+                to="/guides"
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '10px',
+                  width: '100%',
+                  textDecoration: 'none',
+                }}
+              >
+                <BookOpen size={15} />
+
+                <span style={{ flex: 1 }}>
+                  Guides
+                </span>
+
+                <strong
+                  style={{
+                    fontWeight: 500,
+                    whiteSpace: 'nowrap',
+                  }}
+                >
+                  Learn more
+                </strong>
+
+                <ArrowRight size={13} />
+              </Link>
+            </div>
+
+            <div>
+              <Link
+                to="/teams"
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '10px',
+                  width: '100%',
+                  textDecoration: 'none',
+                }}
+              >
+                <Users size={15} />
+
+                <span style={{ flex: 1 }}>
+                  Teams
+                </span>
+
+                <strong
+                  style={{
+                    fontWeight: 500,
+                    whiteSpace: 'nowrap',
+                  }}
+                >
+                  Make a team
+                </strong>
+
+                <ArrowRight size={13} />
+              </Link>
+            </div>
+          </div>
+        </section>
+
+      {/* Final CTA */}
+      <section
+        className="callout home-callout"
+        style={{
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'space-between',
+          gap: '24px',
+        }}
+      >
+        <div style={{ flex: 1 }}>
+          <div className="eyebrow">
+            READY TO BUILD?
+          </div>
+
+          <h3>
+            Pick a character and see everything you need to build them.
+          </h3>
+
+          <p>
+            Check their weapons, artifacts, talents, teams, and materials in one place.
+          </p>
+        </div>
+
+        <Link
+          className="button secondary"
+          to="/characters"
+          style={{
+            flex: '0 0 auto',
+          }}
+        >
+          Browse Characters
+          <ArrowRight size={14} />
+        </Link>
+      </section>
+    </div>
+  );
 }

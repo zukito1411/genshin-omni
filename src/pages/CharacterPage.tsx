@@ -381,10 +381,6 @@ export function CharacterPage() {
         <div className="eyebrow">{character.title ?? 'Playable character'}</div>
         <h1>{displayName}</h1>
         <p>{character.description ?? 'Learn the character, recommended build, teams and materials in one place.'}</p>
-        <div className="hero-actions">
-          <button className={`button ${favorite ? 'primary' : 'secondary'}`} onClick={toggleFavorite}><Heart size={15} fill={favorite ? 'currentColor' : 'none'} /> {favorite ? 'Saved' : 'Save Character'}</button>
-          <button className="button secondary" onClick={() => setTab('build')}><Sparkles size={15} /> Build Guide</button>
-        </div>
         {isTraveler && <label className="traveler-element-control">
           <span>Traveler element</span>
           <select value={travelerElement} onChange={(event) => selectTravelerElement(event.target.value as TravelerElement)} aria-label="Traveler element">
