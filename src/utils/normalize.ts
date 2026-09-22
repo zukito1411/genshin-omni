@@ -117,7 +117,18 @@ export function normalizeEntity(payload: unknown, idHint = ''): LibraryEntity {
     raw.nameIconCard,
     raw.awakenIcon,
   ) ?? '';
-  const effectText = [raw.effect2Pc, raw.effect4Pc, raw.effectName, raw.effectTemplateRaw]
+  const effect = asRecord(raw.effect);
+  const weaponPassive = firstString(
+    raw.effectDescription,
+    raw.effectDetail,
+    raw.effect,
+    effect.r1,
+    effect.R1,
+    effect['1'],
+    raw.r1,
+    raw.effectTemplateRaw,
+  );
+  const effectText = [raw.effect2Pc, raw.effect4Pc, weaponPassive]
     .map(text)
     .filter(Boolean)
     .join(' ')
@@ -128,11 +139,11 @@ export function normalizeEntity(payload: unknown, idHint = ''): LibraryEntity {
     name: firstString(raw.name, raw.displayName, idHint) ?? idHint,
     rarity: Number(raw.rarity ?? raw.rank ?? (Array.isArray(raw.rarityList) ? Math.max(...raw.rarityList.map((value) => Number(value)).filter(Number.isFinite), 0) : 0)) || undefined,
     type: firstString(raw.weaponText, raw.relicText, raw.weaponType, raw.type, raw.itemType, raw.category),
-    description: firstString(raw.description, raw.desc) ?? (effectText || undefined),
+    description: firstString(raw.description, raw.desc, weaponPassive) ?? (effectText || undefined),
     icon: image,
-    baseAttack: Math.round(Number(raw.baseAtkValue ?? raw.baseAttack ?? 0)) || undefined,
-    secondaryStat: firstString(raw.mainStatText, raw.mainStatType),
-    secondaryValue: firstString(raw.baseStatText, raw.mainStatValue),
+    baseAttack: Math.round(Number(raw.baseAtkValue ?? raw.baseAttack ?? raw.baseatk ?? raw.baseATK ?? 0)) || undefined,
+    secondaryStat: firstString(raw.mainStatText, raw.mainStatType, raw.substat, raw.secondaryStat),
+    secondaryValue: firstString(raw.baseStatText, raw.mainStatValue, raw.substatValue, raw.secondaryValue),
     effectName: firstString(raw.effectName),
     twoPieceBonus: firstString(raw.effect2Pc),
     fourPieceBonus: firstString(raw.effect4Pc),

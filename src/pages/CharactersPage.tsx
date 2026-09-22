@@ -1,5 +1,5 @@
 import { useSearchParams } from 'react-router-dom';
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { CharacterCard } from '../components/CharacterCard';
 import { SectionTitle } from '../components/SectionTitle';
 import { useCharacters } from '../hooks/useCharacters';
@@ -7,6 +7,7 @@ import { useCharacters } from '../hooks/useCharacters';
 export function CharactersPage() {
   const [params] = useSearchParams();
   const [search, setSearch] = useState(params.get('search') ?? '');
+  useEffect(() => { setSearch(params.get('search') ?? ''); }, [params]);
   const { characters, loading, error } = useCharacters(search);
   const [element, setElement] = useState('All');
   const [rarity, setRarity] = useState('All');

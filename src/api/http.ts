@@ -52,9 +52,26 @@ export async function getJson<T>(url: string, signal?: AbortSignal, options?: { 
 
   const request = (async () => {
     try {
-      const response = await fetchWithRetry(url, signal, 'application/json');
-      if (!response.ok) throw new Error(`Request failed (${response.status})`);
-      const value = await response.json() as T;
+      let value: T | undefined;
+      let parseError: unknown;
+      // A few public endpoints occasionally answer 200 with a truncated body.
+      // JSON parsing is therefore part of a successful request, not a final
+      // operation after it. Fetch a new response once before surfacing it.
+      for (let attempt = 0; attempt < 2; attempt += 1) {
+        try {
+          const response = await fetchWithRetry(url, signal, 'application/json');
+          if (!response.ok) throw new Error(`Request failed (${response.status})`);
+          const body = (await response.text()).trim();
+          if (!body) throw new Error('Provider returned an empty JSON response.');
+          value = JSON.parse(body) as T;
+          break;
+        } catch (error) {
+          if (signal?.aborted || isAbort(error)) throw error;
+          parseError = error;
+          if (attempt === 0) await waitForRetry(RETRY_DELAYS_MS[0], signal);
+        }
+      }
+      if (value === undefined) throw parseError instanceof Error ? parseError : new Error('Provider returned invalid JSON.');
       writeCache(cacheKey, value, ttlMs);
       return value;
     } catch (error) {

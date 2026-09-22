@@ -108,6 +108,22 @@ function linkedCatalogNames(markdown: string, pathSegment: 'weapon' | 'weapons' 
   return unique(names).slice(0, limit);
 }
 
+function titleFromAssetSlug(value: string): string {
+  return value.replace(/\.[a-z0-9]+$/i, '').replace(/[_-]+/g, ' ')
+    .replace(/\b\w/g, (letter) => letter.toUpperCase()).trim();
+}
+
+function genshinBuildsCardNames(markdown: string, folder: 'weapons' | 'artifacts', limit = 8): string[] {
+  // Genshin Builds wraps a number of cards as an image inside a link. Preserve
+  // the image alt label (when supplied) or its exact asset filename; both are
+  // stable catalog identifiers and avoid ever parsing surrounding prose.
+  const namedImages = [...markdown.matchAll(new RegExp(`!\\[Image\\s*\\d+\\s*:\\s*([^\\]]+)\\]\\([^)]*\\/genshin\\/${folder}\\/[^)]*\\)`, 'gi'))]
+    .map((match) => normalizedName(match[1]));
+  const filenames = [...markdown.matchAll(new RegExp(`https?:\\/\\/[^)\\s]*\\/genshin\\/${folder}\\/([^/?\\s)]+)\\.(?:png|webp)`, 'gi'))]
+    .map((match) => titleFromAssetSlug(match[1]));
+  return unique([...namedImages, ...filenames].filter((name) => name && !/^image\s*\d*$/i.test(name))).slice(0, limit);
+}
+
 function extractIntro(lines: string[]): string {
   const intro = lines.find((line) =>
     line.length >= 80 &&
@@ -119,21 +135,49 @@ function extractIntro(lines: string[]): string {
 }
 
 function extractRole(lines: string[]): string[] {
-  const candidates = lines.slice(0, 100).filter((line) => {
+  const candidates = lines.slice(0, 180).flatMap((line, index, source) => {
+    // A number of publishers render "Role" as a heading and place the value
+    // on the next line. Keep that relationship instead of only inspecting
+    // the heading text itself.
+    if (/^(?:character )?(?:role|playstyle|position)\s*:?$/i.test(line)) return source.slice(index + 1, index + 4);
+    return [line];
+  }).filter((line) => {
     if (!ROLE_PATTERN.test(line) || line.length > 180) return false;
-    return /(?:^|\b)(?:role|playstyle|position)\s*[:|-]/i.test(line) ||
+    return /^(?:main[- ]?dps|sub[- ]?dps|off[- ]field dps|on[- ]field dps|support|healer|buffer|driver|enabler)$/i.test(line) ||
+      /(?:^|\b)(?:role|playstyle|position)\s*[:|-]/i.test(line) ||
       /\b(?:build|recommended)\b.*\b(?:main|sub|off[- ]field|on[- ]field|support|healer|buffer|driver|enabler)\b/i.test(line) ||
-      /\b(?:main|sub|off[- ]field|on[- ]field)\s+dps\b/i.test(line) && /\bbuild\b/i.test(line);
+      /\b(?:main|sub|off[- ]field|on[- ]field)\s+dps\b/i.test(line) ||
+      /\b(?:support|healer|buffer|driver|enabler)\b/i.test(line) && /\b(?:is|as|for|build)\b/i.test(line);
   });
-  const best = candidates[0] ?? '';
-  if (!best) return [];
-  const found = best.match(/(?:Main DPS|Main-DPS|Sub-DPS|Sub DPS|Off-Field DPS|Off Field DPS|Support|Healer|Buffer|Driver|Enabler|On-Field DPS|On Field DPS)/gi) ?? [];
-  return unique(found);
+  const found = candidates.flatMap((line) => line.match(/(?:Main DPS|Main-DPS|Sub-DPS|Sub DPS|Off-Field DPS|Off Field DPS|Support|Healer|Buffer|Driver|Enabler|On-Field DPS|On Field DPS)/gi) ?? []);
+  return unique(found).slice(0, 3);
 }
 
 function extractStatsPriority(text: string): string[] {
-  const matches = text.match(/(?:CRIT Rate|CRIT DMG|DEF%|ATK%|HP%|Energy Recharge|Elemental Mastery|Healing Bonus|Physical DMG|Pyro DMG|Cryo DMG|Hydro DMG|Electro DMG|Dendro DMG|Geo DMG|Anemo DMG)/gi) ?? [];
-  return unique(matches);
+  const matches = text.match(/(?:CRIT Rate|Crit Rate|CRIT DMG|Crit DMG|Crit Damage|DEF%|ATK%|HP%|Energy Recharge|\bER\b|Elemental Mastery|\bEM\b|Healing Bonus|Physical DMG(?: Bonus)?|Pyro DMG(?: Bonus)?|Cryo DMG(?: Bonus)?|Hydro DMG(?: Bonus)?|Electro DMG(?: Bonus)?|Dendro DMG(?: Bonus)?|Geo DMG(?: Bonus)?|Anemo DMG(?: Bonus)?)/gi) ?? [];
+  const normalized = matches.map((value) => {
+    if (/^crit damage$/i.test(value)) return 'CRIT DMG';
+    if (/^crit rate$/i.test(value)) return 'CRIT Rate';
+    if (/^er$/i.test(value)) return 'Energy Recharge';
+    if (/^em$/i.test(value)) return 'Elemental Mastery';
+    return value.replace(/\s+Bonus$/i, '');
+  });
+  return unique(normalized);
+}
+
+function extractTalentPriority(lines: string[]): string[] {
+  const priorityHeading = lines.findIndex((line) => /^talent(?:s)?\s+priority\s*:?$/i.test(line));
+  const candidates = priorityHeading >= 0
+    ? lines.slice(priorityHeading + 1, priorityHeading + 6)
+    : lines.filter((line) => /(?:Normal Attack|Elemental Skill|Elemental Burst|\bNA\b|\bE\b|\bQ\b).*(?:>|priority|first)/i.test(line));
+  const values = candidates.flatMap((line) => line.match(/(?:Normal Attack|Elemental Skill|Elemental Burst|NA|E Skill|Q Burst|\bE\b|\bQ\b)/gi) ?? []);
+  const normalized = values.map((value) => {
+    if (/^(?:NA|Normal Attack)$/i.test(value)) return 'Normal Attack';
+    if (/^(?:E|E Skill|Elemental Skill)$/i.test(value)) return 'Elemental Skill';
+    if (/^(?:Q|Q Burst|Elemental Burst)$/i.test(value)) return 'Elemental Burst';
+    return value;
+  });
+  return unique(normalized);
 }
 
 function extractMainStats(text: string): { sands: string; goblet: string; circlet: string } {
@@ -163,22 +207,20 @@ function parseGenshinBuilds(markdown: string, slug: string, url: string): Parsed
   const teamSection = section(lines, [/^Best teams/i, /^Best teams for/i, /^Team Compositions$/i], [/^Skills$/i, /^Passive Talents$/i, /^Constellations$/i, /^Outfits$/i, /^Stats$/i]);
   const talentSection = section(lines, [/^Talents Priority/i], [/^Casting .* directly/i, /^Most-used community build/i, /^Best teams/i, /^Skills$/i]);
 
-  // The guide currently represents artifact cards as unlabeled images in its
-  // reader markdown. Adjacent prose is not an item list, so never turn it
-  // into a recommendation. Icy Veins has stable artifact links and fills the
-  // field when available.
-  const weaponLinks = linkedCatalogNames(markdownSection(markdown, [/^Weapons$/i, /^Best Weapons/i], [/^Artifacts$/i, /^Substats Priority$/i, /^Talents Priority$/i, /^Recommended Primary Stats/i]), 'weapon', 8);
-  const weapons = weaponLinks;
-  const artifacts: string[] = [];
-  const substats = extractStatsPriority(statSection.filter((line) => /substats?/i.test(line)).join(' | '));
+  const weaponMarkdown = markdownSection(markdown, [/^Weapons$/i, /^Best Weapons/i], [/^Artifacts$/i, /^Substats Priority$/i, /^Talents Priority$/i, /^Recommended Primary Stats/i]);
+  const artifactMarkdown = markdownSection(markdown, [/^Artifacts$/i, /^Best Artifacts/i], [/^Substats Priority$/i, /^Talents Priority$/i, /^Recommended Primary Stats/i, /^Most-used community build/i]);
+  const weapons = unique([
+    ...linkedCatalogNames(weaponMarkdown, 'weapon', 8),
+    ...genshinBuildsCardNames(weaponMarkdown, 'weapons', 8),
+  ]).slice(0, 8);
+  const artifacts = unique([
+    ...linkedCatalogNames(artifactMarkdown, 'artifact', 8),
+    ...genshinBuildsCardNames(artifactMarkdown, 'artifacts', 8),
+  ]).slice(0, 8);
+  const substats = extractStatsPriority(statSection.join(' | '));
   const mainStats = extractMainStats(statSection.join(' | '));
 
-  const talentPriorityLine = talentSection.find((line) => /\b(?:E|Q|NA)\b|Normal Attack|Elemental Skill|Elemental Burst/i.test(line));
-  const talentPriority = unique(
-    talentPriorityLine
-      ? (talentPriorityLine.match(/(?:Normal Attack|Elemental Skill|Elemental Burst|E Skill|Q Burst|NA Normal Attack|E|Q|NA)/gi) ?? [])
-      : [],
-  );
+  const talentPriority = extractTalentPriority([...talentSection, ...lines.slice(0, 180)]);
 
   const teams: CharacterGuide['teams'] = [];
   for (let i = 0; i < teamSection.length; i += 1) {
@@ -228,9 +270,8 @@ function parseIcyVeins(markdown: string, slug: string, url: string): ParsedSourc
   const weaponNames = linkedCatalogNames(markdownSection(markdown, [/^Best Weapons for /i], [/^Best Artifacts for /i]), 'weapons', 8);
   const artifactNames = linkedCatalogNames(markdownSection(markdown, [/^Best Artifacts for /i], [/^.+Stat Priority$/i, /^.+Talent Priority$/i, /^How to Play /i]), 'artifacts', 8);
   const mainStats = extractMainStats(statLines.join(' | '));
-  const substats = extractStatsPriority(statLines.find((line) => /^Substats?:/i.test(line)) ?? '');
-  const talentLine = lines.find((line) => /^Talent Priority:/i.test(line));
-  const talentPriority = talentLine ? unique((talentLine.split(':').slice(1).join(':').match(/[^>]+/g) ?? []).map((item) => clean(item)).slice(0, 5)) : [];
+  const substats = extractStatsPriority(statLines.join(' | '));
+  const talentPriority = extractTalentPriority(lines);
   const teamUrl = url.replace(/-guide-best-builds$/, '-team-guide');
   return {
     characterId: slug,
@@ -293,7 +334,10 @@ function mergeSourceGuides(guides: ParsedSourceGuide[], slug: string): LivePlaye
   // it remains the preferred team source but cannot override linked equipment.
   const equipmentGuide = ordered.find((guide) => guide.sourceKey === 'icyVeins' && guide.weapons.length && guide.artifacts.length);
 
-  const supplement = (field: keyof CharacterGuide) => ordered.find((guide) => guide !== primary && Array.isArray(guide[field]) && (guide[field] as unknown[]).length)?.[field] as never;
+  const bestList = <T,>(field: keyof CharacterGuide): T[] => {
+    const lists = ordered.map((guide) => guide[field]).filter(Array.isArray) as T[][];
+    return [...lists].sort((a, b) => b.length - a.length)[0] ?? [];
+  };
   const firstNonEmptyMainStat = (key: keyof LivePlayerGuide['mainStats']) => ordered.find((guide) => guide.mainStats[key])?.mainStats[key] ?? '';
 
   return {
@@ -301,12 +345,12 @@ function mergeSourceGuides(guides: ParsedSourceGuide[], slug: string): LivePlaye
     characterId: slug,
     source: ordered.map((guide) => guide.source).join(' + '),
     sourceUrl: primary.sourceUrl,
-    role: primary.role.length ? primary.role : (supplement('role') as string[] | undefined) ?? [],
+    role: bestList<string>('role'),
     summary: primary.summary || ordered.find((guide) => guide.summary)?.summary || '',
-    statPriority: primary.statPriority.length ? primary.statPriority : (supplement('statPriority') as string[] | undefined) ?? [],
-    talentPriority: primary.talentPriority.length ? primary.talentPriority : (supplement('talentPriority') as string[] | undefined) ?? [],
-    weapons: equipmentGuide?.weapons ?? (primary.weapons.length ? primary.weapons : (supplement('weapons') as LivePlayerGuide['weapons'] | undefined) ?? []),
-    artifacts: equipmentGuide?.artifacts ?? [],
+    statPriority: bestList<string>('statPriority'),
+    talentPriority: bestList<string>('talentPriority'),
+    weapons: equipmentGuide?.weapons ?? (primary.weapons.length ? primary.weapons : bestList<LivePlayerGuide['weapons'][number]>('weapons')),
+    artifacts: equipmentGuide?.artifacts ?? (primary.artifacts.length ? primary.artifacts : bestList<LivePlayerGuide['artifacts'][number]>('artifacts')),
     mainStats: {
       sands: primary.mainStats.sands || firstNonEmptyMainStat('sands'),
       goblet: primary.mainStats.goblet || firstNonEmptyMainStat('goblet'),
@@ -381,8 +425,8 @@ function refreshGuideOnce(cleanSlug: string, onUpdate?: (guide: LivePlayerGuide)
 
 export async function fetchPlayerGuide(slug: string, signal?: AbortSignal, onUpdate?: (guide: LivePlayerGuide) => void): Promise<LivePlayerGuide> {
   const cleanSlug = slugify(slug);
-  // v8 requires full build cards and invalidates partial guide responses.
-  const cacheKey = `player-guide:${cleanSlug}:v8`;
+  // v11 invalidates guide entries from before labeled-field extraction.
+  const cacheKey = `player-guide:${cleanSlug}:v11`;
   const inMemory = guideMemory.get(cacheKey);
   if (inMemory && Date.now() < inMemory.expiresAt) { onUpdate?.(inMemory.value); return inMemory.value; }
   const cached = readCache<LivePlayerGuide>(cacheKey);

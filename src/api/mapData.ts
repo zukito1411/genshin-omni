@@ -50,7 +50,7 @@ export async function fetchLiveMapMarkers(signal?: AbortSignal): Promise<LiveMap
     throw new Error('The community marker data has an unexpected format.');
   }
 
-  return payload.data
+  const markers = payload.data
     .map((row): LiveMapMarker | null => {
       const id = Number(row[idIndex]);
       const mapId = Number(row[mapIndex]);
@@ -62,4 +62,27 @@ export async function fetchLiveMapMarkers(signal?: AbortSignal): Promise<LiveMap
       return { id, type, name: markerName(type), mapId, level, x, y };
     })
     .filter((marker): marker is LiveMapMarker => Boolean(marker));
+
+  // Marker coordinates are world-space values, not CSS percentages. Their
+  // extents vary for every map layer and can be negative, so normalize each
+  // layer independently before a marker reaches the canvas.
+  const bounds = new Map<number, { minX: number; maxX: number; minY: number; maxY: number }>();
+  for (const marker of markers) {
+    const current = bounds.get(marker.mapId) ?? { minX: marker.x, maxX: marker.x, minY: marker.y, maxY: marker.y };
+    current.minX = Math.min(current.minX, marker.x); current.maxX = Math.max(current.maxX, marker.x);
+    current.minY = Math.min(current.minY, marker.y); current.maxY = Math.max(current.maxY, marker.y);
+    bounds.set(marker.mapId, current);
+  }
+  const padding = .035;
+  return markers.map((marker) => {
+    const box = bounds.get(marker.mapId)!;
+    const width = Math.max(box.maxX - box.minX, .0001);
+    const height = Math.max(box.maxY - box.minY, .0001);
+    return {
+      ...marker,
+      x: padding + ((marker.x - box.minX) / width) * (1 - padding * 2),
+      // World latitude increases upward; CSS top increases downward.
+      y: 1 - padding - ((marker.y - box.minY) / height) * (1 - padding * 2),
+    };
+  });
 }
