@@ -610,6 +610,7 @@ button:focus-visible, a:focus-visible, input:focus-visible, select:focus-visible
   .section-title h2 { font-size: clamp(25px, 8vw, 33px); }
   .section-title p { font-size: 13px; }
   .toolbar { gap: 7px; }
+  .sticky-toolbar { position: static; top: auto; z-index: auto; margin: 0 0 14px; padding: 0; background: transparent; backdrop-filter: none; }
   .search-input { flex-basis: 100%; min-width: 0; }
   .toolbar select { flex: 1 1 calc(50% - 4px); min-width: 0; }
   .results-bar { align-items: flex-start; font-size: 12px; }

@@ -4,14 +4,13 @@ import { useMemo, useState, type FormEvent, type KeyboardEvent } from 'react';
 import { useCharacters } from '../hooks/useCharacters';
 import { clearAppCache } from '../api/cache';
 
-const localDevMap = import.meta.env.DEV && window.location.hostname === 'localhost';
 const nav = [
   { to: '/', label: 'Home', icon: Home },
   { to: '/characters', label: 'Characters', icon: Users },
   { to: '/weapons', label: 'Weapons', icon: Swords },
   { to: '/artifacts', label: 'Artifacts', icon: Boxes },
   { to: '/teams', label: 'Team Builder', icon: Shield },
-  ...(localDevMap ? [{ to: '/map', label: 'Interactive Map', icon: Map }] : []),
+  { to: '/map', label: 'Interactive Map', icon: Map },
   { to: '/guides', label: 'Guides / FAQ', icon: BookOpen },
 ];
 
