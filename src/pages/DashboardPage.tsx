@@ -35,11 +35,7 @@ type PaimonAction =
 
 const PAIMON_AFK_TIME = 1 * 60 * 1000;
 const PAIMON_ANGER_HIDE_TIME = 10 * 1000;
-
-const PAIMON_DIRECTIONAL_FRAMES = {
-  'running-right': 0,
-  'running-left': 0,
-} as const;
+const PAIMON_MOVE_DURATION = 1800;
 
 function PaimonCompanion() {
   const [visible, setVisible] = useState(true);
@@ -67,11 +63,39 @@ function PaimonCompanion() {
   const actionTimeoutRef =
     useRef<number | null>(null);
 
+  const movementTimeoutRef =
+    useRef<number | null>(null);
+
   const afkTimeoutRef =
+    useRef<number | null>(null);
+
+  const normalBehaviorTimeoutRef =
+    useRef<number | null>(null);
+
+  const popOutTimeoutRef =
+    useRef<number | null>(null);
+
+  const popInTimeoutRef =
     useRef<number | null>(null);
 
   const clickTimesRef =
     useRef<number[]>([]);
+
+  const actionBusyRef =
+    useRef(false);
+
+  const visibleRef =
+    useRef(visible);
+
+  const isAfkRef =
+    useRef(isAfk);
+
+  const presenceRef =
+    useRef(presence);
+
+  visibleRef.current = visible;
+  isAfkRef.current = isAfk;
+  presenceRef.current = presence;
 
   const spriteRows: Record<PaimonAction, number> = {
     idle: 0,
@@ -95,6 +119,16 @@ function PaimonCompanion() {
     }
   }
 
+  function clearMovementTimeout() {
+    if (movementTimeoutRef.current !== null) {
+      window.clearTimeout(
+        movementTimeoutRef.current,
+      );
+
+      movementTimeoutRef.current = null;
+    }
+  }
+
   function clearAfkTimeout() {
     if (afkTimeoutRef.current !== null) {
       window.clearTimeout(
@@ -105,20 +139,108 @@ function PaimonCompanion() {
     }
   }
 
+  function clearNormalBehaviorTimeout() {
+    if (
+      normalBehaviorTimeoutRef.current !== null
+    ) {
+      window.clearTimeout(
+        normalBehaviorTimeoutRef.current,
+      );
+
+      normalBehaviorTimeoutRef.current = null;
+    }
+  }
+
+  function clearPresenceTimeouts() {
+    if (popOutTimeoutRef.current !== null) {
+      window.clearTimeout(
+        popOutTimeoutRef.current,
+      );
+
+      popOutTimeoutRef.current = null;
+    }
+
+    if (popInTimeoutRef.current !== null) {
+      window.clearTimeout(
+        popInTimeoutRef.current,
+      );
+
+      popInTimeoutRef.current = null;
+    }
+  }
+
+  function getRandomPaimonLine() {
+    const lines = [
+      'How are you doing?',
+      'What are we gonna do today?',
+      'Where should we go first?',
+      'Paimon thinks we should explore!',
+      'Hmm... what should we do next?',
+      'Paimon is ready!',
+      'Treasure hunting?',
+      'Paimon wants to go too!',
+      'Where do you think we should go?',
+      'Paimon wonders what is nearby...',
+      'There is still so much to explore!',
+      'Paimon could really use a snack...',
+      'Hmmmm... what should we do?',
+      'Paimon has a good feeling about today!',
+      'Should we check the map?',
+      'Paimon is thinking...',
+      'Did you bring snacks?',
+      'Paimon is not emergency food!',
+      'What are we building today?',
+      'Paimon wants to see!',
+    ];
+
+    return lines[
+      Math.floor(
+        Math.random() * lines.length,
+      )
+    ];
+  }
+
+  function getRandomTrivia() {
+    const trivia = [
+      'Teyvat has seven elements.',
+      'Paimon can float instead of walking.',
+      'Every elemental reaction begins with elemental application.',
+      'There are seven nations across Teyvat.',
+      'The Traveler can use different elements.',
+      'Paimon loves treasure chests!',
+    ];
+
+    return trivia[
+      Math.floor(
+        Math.random() * trivia.length,
+      )
+    ];
+  }
+
   function playTemporaryAction(
     nextAction: PaimonAction,
     duration = 1200,
+    nextSpeech?: string,
   ) {
     clearActionTimeout();
+    clearMovementTimeout();
+
+    actionBusyRef.current = true;
 
     setFrame(0);
     setAction(nextAction);
 
     actionTimeoutRef.current =
       window.setTimeout(() => {
+        actionBusyRef.current = false;
+
         setFrame(0);
         setAction('idle');
-        setSpeech(getRandomPaimonLine());
+
+        setSpeech(
+          nextSpeech ??
+          getRandomPaimonLine(),
+        );
 
         actionTimeoutRef.current = null;
       }, duration);
@@ -131,8 +253,11 @@ function PaimonCompanion() {
 
     afkTimeoutRef.current =
       window.setTimeout(() => {
+        if (!visibleRef.current) return;
+
         setIsAfk(true);
         setFrame(0);
+        setAction('waiting');
 
         const messages = [
           'Traveler... are you still there?',
@@ -141,6 +266,9 @@ function PaimonCompanion() {
           'Hmm... maybe Paimon should find some food.',
           'Traveler? Paimon is still here!',
           'Are we going somewhere today?',
+          'Paimon is waiting...',
+          'Did you fall asleep?',
+          'Paimon is still here, you know!',
         ];
 
         setSpeech(
@@ -151,12 +279,14 @@ function PaimonCompanion() {
           )
           ],
         );
-
-        setAction('waiting');
       }, PAIMON_AFK_TIME);
   }
 
   function moveToRandomSpot() {
+    if (!visibleRef.current) return;
+    if (presenceRef.current !== 'visible') return;
+    if (actionBusyRef.current) return;
+
     const spots = [
       { x: 6, y: 64 },
       { x: 74, y: 65 },
@@ -185,21 +315,36 @@ function PaimonCompanion() {
         )
         ] ?? spots[0];
 
-      clearActionTimeout();
-      setFrame(0);
+      clearMovementTimeout();
 
-      if (next.x > current.x) {
-        setAction('running-right');
-      } else {
-        setAction('running-left');
-      }
+      setFrame(
+        next.x > current.x
+          ? 0
+          : 6,
+      );
 
-      actionTimeoutRef.current =
+      setAction(
+        next.x > current.x
+          ? 'running-right'
+          : 'running-left',
+      );
+
+      movementTimeoutRef.current =
         window.setTimeout(() => {
           setFrame(0);
-          setAction('idle');
-          actionTimeoutRef.current = null;
-        }, 1800);
+
+          setAction(
+            (currentAction) =>
+              currentAction ===
+                'running-right' ||
+                currentAction ===
+                'running-left'
+                ? 'idle'
+                : currentAction,
+          );
+
+          movementTimeoutRef.current = null;
+        }, PAIMON_MOVE_DURATION);
 
       return next;
     });
@@ -212,12 +357,12 @@ function PaimonCompanion() {
     const targetX =
       ((rect.left +
         rect.width / 2 -
-        96) /
+        95) /
         window.innerWidth) *
       100;
 
     const targetY =
-      ((rect.top - 220) /
+      ((rect.top - 215) /
         window.innerHeight) *
       100;
 
@@ -233,10 +378,155 @@ function PaimonCompanion() {
     });
   }
 
+  function runNormalBehavior() {
+    if (!visibleRef.current) return;
+    if (isAfkRef.current) return;
+    if (presenceRef.current !== 'visible') {
+      return;
+    }
+
+    if (actionBusyRef.current) {
+      return;
+    }
+
+    /*
+     * Trivia gets its own behavior.
+     *
+     * This guarantees the REVIEW row is
+     * actually used whenever Paimon gives
+     * a trivia/fact.
+     */
+    if (Math.random() < 0.35) {
+      playTemporaryAction(
+        'review',
+        3200,
+        getRandomTrivia(),
+      );
+
+      return;
+    }
+
+    const behaviors: Array<{
+      action: PaimonAction;
+      lines: string[];
+      duration: number;
+    }> = [
+        {
+          action: 'idle',
+          lines: [
+            'Hmmmm...',
+            'What should we do next?',
+            'Paimon is thinking...',
+            'There is still so much to explore!',
+            'Where should we go today?',
+          ],
+          duration: 1800,
+        },
+        {
+          action: 'waiting',
+          lines: [
+            'Paimon is getting a little hungry...',
+            'Do you have any snacks?',
+            'Paimon could really use a meal...',
+            'Hmm... Paimon wants something to eat.',
+            'Paimon hopes there is food nearby...',
+          ],
+          duration: 2200,
+        },
+        {
+          action: 'waving',
+          lines: [
+            'Hey, Traveler!',
+            'Paimon is still here!',
+            'What are we doing today?',
+            'Paimon is ready!',
+            'Hey! Look at Paimon!',
+          ],
+          duration: 1700,
+        },
+        {
+          action: 'jumping',
+          lines: [
+            'Ooh! That looks interesting!',
+            'Treasure!',
+            'Let’s go!',
+            'Paimon has an idea!',
+            'Adventure time!',
+          ],
+          duration: 1400,
+        },
+      ];
+
+    const behavior =
+      behaviors[
+      Math.floor(
+        Math.random() *
+        behaviors.length,
+      )
+      ];
+
+    const line =
+      behavior.lines[
+      Math.floor(
+        Math.random() *
+        behavior.lines.length,
+      )
+      ];
+
+    playTemporaryAction(
+      behavior.action,
+      behavior.duration,
+      line,
+    );
+  }
+
+  function scheduleNextNormalBehavior() {
+    clearNormalBehaviorTimeout();
+
+    if (!visibleRef.current) return;
+    if (isAfkRef.current) return;
+
+    if (
+      presenceRef.current !==
+      'visible'
+    ) {
+      return;
+    }
+
+    const delay =
+      7000 +
+      Math.floor(
+        Math.random() * 9000,
+      );
+
+    normalBehaviorTimeoutRef.current =
+      window.setTimeout(() => {
+        if (
+          !visibleRef.current ||
+          isAfkRef.current ||
+          presenceRef.current !==
+          'visible'
+        ) {
+          return;
+        }
+
+        runNormalBehavior();
+
+        scheduleNextNormalBehavior();
+      }, delay);
+  }
+
   function reactToSiteInteraction(
     element: Element,
   ) {
-    if (!visible) return;
+    if (!visibleRef.current) return;
+
+    if (
+      presenceRef.current !==
+      'visible'
+    ) {
+      return;
+    }
 
     const tagName =
       element.tagName.toLowerCase();
@@ -244,6 +534,7 @@ function PaimonCompanion() {
     const isInteractive =
       tagName === 'button' ||
       tagName === 'a' ||
+      tagName === 'select' ||
       element.getAttribute(
         'role',
       ) === 'button';
@@ -262,78 +553,49 @@ function PaimonCompanion() {
       'Paimon is ready!',
       'Treasure hunting?',
       'Paimon wants to go too!',
+      'What are you looking at?',
+      'Paimon wants to see!',
     ];
 
-    if (Math.random() < 0.25) {
-      const facts = [
-        'Did you know? Paimon is not emergency food!',
-        'Paimon wonders what treasures we will find.',
-        'There are so many places left to explore!',
-        'Paimon loves treasure chests!',
-      ];
+    const facts = [
+      'Did you know? Paimon is not emergency food!',
+      'Paimon thinks every treasure chest deserves a look!',
+      'There are still so many places to explore!',
+      'Paimon wonders what we will find next!',
+    ];
 
-      setSpeech(
-        facts[
+    const line =
+      Math.random() < 0.25
+        ? facts[
         Math.floor(
           Math.random() *
           facts.length,
         )
-        ],
-      );
-    } else {
-      setSpeech(
-        messages[
+        ]
+        : messages[
         Math.floor(
           Math.random() *
           messages.length,
         )
-        ],
-      );
-    }
+        ];
 
     playTemporaryAction(
       'waving',
       1400,
+      line,
     );
   }
 
-  function getRandomPaimonLine() {
-    const lines = [
-      'How are you doing?',
-      'What are we gonna do today?',
-      'Where should we go first?',
-      'Paimon thinks we should explore!',
-      'Hmm... what should we do next?',
-      'Paimon is ready!',
-      'Treasure hunting?',
-      'Paimon wants to go too!',
-      'Where do you think we should go?',
-      'Paimon wonders what is nearby...',
-      'There is still so much to explore!',
-      'Paimon could really use a snack...',
-      'Hmmmm... what should we do?',
-      'Paimon has a good feeling about today!',
-    ];
-
-    return lines[
-      Math.floor(
-        Math.random() * lines.length,
-      )
-    ];
-  }
-
   function handlePaimonClick() {
-    if (!visible || presence === 'exiting') {
+    if (
+      !visible ||
+      presence === 'exiting'
+    ) {
       return;
     }
 
     const now = Date.now();
 
-    /*
-     * Keep rapid clicks together.
-     * Ten clicks must happen within this window
-     * to trigger the pop-out.
-     */
     clickTimesRef.current =
       clickTimesRef.current.filter(
         (time) =>
@@ -347,15 +609,17 @@ function PaimonCompanion() {
 
     /*
      * TEN RAPID CLICKS
-     *
-     * Paimon becomes angry and properly
-     * pops out before being hidden.
      */
     if (clickCount >= 10) {
       clickTimesRef.current = [];
 
       clearActionTimeout();
+      clearMovementTimeout();
       clearAfkTimeout();
+      clearNormalBehaviorTimeout();
+      clearPresenceTimeouts();
+
+      actionBusyRef.current = true;
 
       setIsAfk(false);
       setFrame(0);
@@ -363,56 +627,54 @@ function PaimonCompanion() {
         'ENOUGH! Leave Paimon alone!',
       );
       setAction('failed');
-
-      /*
-       * Start the CSS exit animation.
-       */
       setPresence('exiting');
 
-      /*
-       * Wait until the animation finishes
-       * before actually hiding her.
-       */
-      window.setTimeout(() => {
-        setVisible(false);
-        setPresence('visible');
-      }, 700);
-
-      /*
-       * Stay hidden for 10 seconds.
-       */
-      window.setTimeout(() => {
-        setVisible(true);
-        setFrame(0);
-        setAction('idle');
-
-        setSpeech(
-          'Paimon is back...',
-        );
-
-        /*
-         * Start the CSS entrance animation.
-         */
-        setPresence('entering');
-
+      popOutTimeoutRef.current =
         window.setTimeout(() => {
+          setVisible(false);
           setPresence('visible');
-          resetAfkTimer();
+
+          popOutTimeoutRef.current =
+            null;
         }, 700);
-      }, PAIMON_ANGER_HIDE_TIME + 700);
+
+      popInTimeoutRef.current =
+        window.setTimeout(() => {
+          setVisible(true);
+          setFrame(0);
+          setAction('idle');
+
+          setSpeech(
+            Math.random() < 0.5
+              ? 'Paimon is back...'
+              : getRandomPaimonLine(),
+          );
+
+          setPresence('entering');
+
+          window.setTimeout(() => {
+            actionBusyRef.current = false;
+
+            setPresence('visible');
+
+            resetAfkTimer();
+            scheduleNextNormalBehavior();
+          }, 700);
+        }, PAIMON_ANGER_HIDE_TIME + 700);
 
       return;
     }
 
     /*
      * THREE RAPID CLICKS
-     *
-     * Paimon gets angry but stays visible.
      */
     if (clickCount >= 3) {
       clearActionTimeout();
+      clearMovementTimeout();
 
       resetAfkTimer();
+
+      actionBusyRef.current = true;
 
       setIsAfk(false);
       setFrame(0);
@@ -427,17 +689,24 @@ function PaimonCompanion() {
 
       actionTimeoutRef.current =
         window.setTimeout(() => {
+          actionBusyRef.current = false;
+
           setFrame(0);
           setAction('idle');
+          setSpeech(
+            getRandomPaimonLine(),
+          );
 
           actionTimeoutRef.current = null;
+
+          scheduleNextNormalBehavior();
         }, 1800);
 
       return;
     }
 
     /*
-     * NORMAL CLICK REACTION
+     * NORMAL POKE
      */
     resetAfkTimer();
 
@@ -472,55 +741,103 @@ function PaimonCompanion() {
       )
       ];
 
-    setSpeech(reaction.text);
-
-    setSpeech(reaction.text);
-
     playTemporaryAction(
       reaction.action,
       1200,
+      reaction.text,
     );
   }
 
   /*
-   * ACTUAL SPRITE FRAME PLAYER
+   * FRAME PLAYER
    *
-   * Exactly one frame is selected at a time.
+   * Directional movement:
+   * right = frames 0, 1
+   * left  = frames 6, 7
    *
-   * Frame 0 = first cell
-   * Frame 1 = second cell
-   * etc.
+   * Everything else:
+   * frames 0–7
    */
   useEffect(() => {
     if (!visible) return;
 
-    /*
-     * Left/right movement uses one fixed frame.
-     * Paimon's position itself is animated by CSS,
-     * so we don't need to play the whole directional row.
-     */
-    if (
-      action === 'running-right' ||
-      action === 'running-left'
-    ) {
-      setFrame(
-        PAIMON_DIRECTIONAL_FRAMES[action],
-      );
+    const frameSequences: Record<
+      PaimonAction,
+      number[]
+    > = {
+      idle: [
+        0, 1, 2, 3,
+        4, 5, 6, 7,
+      ],
 
-      return;
-    }
+      'running-right': [
+        0, 1,
+      ],
+
+      'running-left': [
+        6, 7,
+      ],
+
+      waving: [
+        0, 1, 2, 3,
+        4, 5, 6, 7,
+      ],
+
+      jumping: [
+        0, 1, 2, 3,
+        4, 5, 6, 7,
+      ],
+
+      failed: [
+        0, 1, 2, 3,
+        4, 5, 6, 7,
+      ],
+
+      waiting: [
+        0, 1, 2, 3,
+        4, 5, 6, 7,
+      ],
+
+      running: [
+        0, 1, 2, 3,
+        4, 5, 6, 7,
+      ],
+
+      review: [
+        0, 1, 2, 3,
+        4, 5, 6, 7,
+      ],
+    };
+
+    const sequence =
+      frameSequences[action];
+
+    let sequenceIndex = 0;
+
+    setFrame(sequence[0]);
 
     const frameInterval =
       action === 'waiting'
         ? 220
-        : action === 'idle'
-          ? 170
-          : 115;
+        : action === 'review'
+          ? 180
+          : action === 'idle'
+            ? 170
+            : action ===
+              'running-right' ||
+              action ===
+              'running-left'
+              ? 150
+              : 125;
 
     const interval =
       window.setInterval(() => {
-        setFrame((current) =>
-          (current + 1) % 8,
+        sequenceIndex =
+          (sequenceIndex + 1) %
+          sequence.length;
+
+        setFrame(
+          sequence[sequenceIndex],
         );
       }, frameInterval);
 
@@ -529,14 +846,44 @@ function PaimonCompanion() {
     };
   }, [action, visible]);
 
+  /*
+   * Start AFK timer.
+   */
   useEffect(() => {
+    if (!visible) return;
+
     resetAfkTimer();
 
     return () => {
       clearAfkTimeout();
     };
-  }, []);
+  }, [visible]);
 
+  /*
+   * Normal autonomous behavior.
+   */
+  useEffect(() => {
+    if (!visible) return;
+    if (isAfk) return;
+    if (presence !== 'visible') return;
+
+    scheduleNextNormalBehavior();
+
+    return () => {
+      clearNormalBehaviorTimeout();
+    };
+  }, [
+    visible,
+    isAfk,
+    presence,
+  ]);
+
+  /*
+   * Site interactions.
+   *
+   * Mouse movement and keyboard input
+   * do not count.
+   */
   useEffect(() => {
     const handleSiteClick = (
       event: MouseEvent,
@@ -559,13 +906,13 @@ function PaimonCompanion() {
     };
 
     const handleSiteScroll = () => {
-      if (!visible) return;
+      if (!visibleRef.current) return;
 
       resetAfkTimer();
     };
 
     const handleSiteInput = () => {
-      if (!visible) return;
+      if (!visibleRef.current) return;
 
       resetAfkTimer();
     };
@@ -619,26 +966,42 @@ function PaimonCompanion() {
         true,
       );
     };
-  }, [visible]);
+  }, []);
 
+  /*
+   * Background movement.
+   */
   useEffect(() => {
     if (!visible) return;
+    if (presence !== 'visible') return;
 
     const interval =
       window.setInterval(() => {
         moveToRandomSpot();
-      }, 5000);
+      }, 8000);
 
     return () => {
       window.clearInterval(interval);
     };
-  }, [visible]);
+  }, [
+    visible,
+    presence,
+  ]);
 
+  /*
+   * AFK behavior.
+   */
   useEffect(() => {
-    if (!isAfk || !visible) return;
+    if (!visible) return;
+    if (!isAfk) return;
+    if (presence !== 'visible') return;
 
     const interval =
       window.setInterval(() => {
+        if (actionBusyRef.current) {
+          return;
+        }
+
         const messages = [
           'Traveler...?',
           'Paimon is getting hungry...',
@@ -646,19 +1009,24 @@ function PaimonCompanion() {
           'Paimon is still waiting.',
           'Should we go exploring?',
           'Hmmmmmm...',
+          'Did you fall asleep?',
+          'Paimon is getting bored...',
+          'Maybe we should go somewhere!',
         ];
 
-        setSpeech(
+        const message =
           messages[
           Math.floor(
             Math.random() *
             messages.length,
           )
-          ],
-        );
+          ];
 
-        setAction('waiting');
-        setFrame(0);
+        playTemporaryAction(
+          'waiting',
+          2200,
+          message,
+        );
 
         moveToRandomSpot();
       }, 7000);
@@ -666,12 +1034,19 @@ function PaimonCompanion() {
     return () => {
       window.clearInterval(interval);
     };
-  }, [isAfk, visible]);
+  }, [
+    isAfk,
+    visible,
+    presence,
+  ]);
 
   useEffect(() => {
     return () => {
       clearActionTimeout();
+      clearMovementTimeout();
       clearAfkTimeout();
+      clearNormalBehaviorTimeout();
+      clearPresenceTimeouts();
     };
   }, []);
 
@@ -720,8 +1095,10 @@ function PaimonCompanion() {
 }
 
 export function DashboardPage() {
-  const { allCharacters, loading } =
-    useCharacters('');
+  const {
+    allCharacters,
+    loading,
+  } = useCharacters('');
 
   const favorites = useMemo(
     () =>
@@ -736,29 +1113,41 @@ export function DashboardPage() {
     [allCharacters],
   );
 
-  const slideshowCharacters = useMemo(() => {
-    if (!allCharacters.length) return [];
+  const slideshowCharacters =
+    useMemo(() => {
+      if (!allCharacters.length) {
+        return [];
+      }
 
-    const favoriteIds = new Set(
-      favorites.map(
-        (character) => character.id,
-      ),
-    );
+      const favoriteIds =
+        new Set(
+          favorites.map(
+            (character) =>
+              character.id,
+          ),
+        );
 
-    const remainingCharacters =
-      allCharacters.filter(
-        (character) =>
-          !favoriteIds.has(character.id),
-      );
+      const remainingCharacters =
+        allCharacters.filter(
+          (character) =>
+            !favoriteIds.has(
+              character.id,
+            ),
+        );
 
-    return [
-      ...favorites,
-      ...remainingCharacters,
-    ];
-  }, [allCharacters, favorites]);
+      return [
+        ...favorites,
+        ...remainingCharacters,
+      ];
+    }, [
+      allCharacters,
+      favorites,
+    ]);
 
-  const [slideIndex, setSlideIndex] =
-    useState(0);
+  const [
+    slideIndex,
+    setSlideIndex,
+  ] = useState(0);
 
   const [
     isTransitioning,
@@ -766,28 +1155,34 @@ export function DashboardPage() {
   ] = useState(false);
 
   useEffect(() => {
-    if (slideshowCharacters.length <= 1) {
+    if (
+      slideshowCharacters.length <= 1
+    ) {
       return;
     }
 
-    const interval = window.setInterval(() => {
-      setIsTransitioning(true);
+    const interval =
+      window.setInterval(() => {
+        setIsTransitioning(true);
 
-      window.setTimeout(() => {
-        setSlideIndex((current) =>
-          (current + 1) %
-          slideshowCharacters.length,
-        );
+        window.setTimeout(() => {
+          setSlideIndex(
+            (current) =>
+              (current + 1) %
+              slideshowCharacters.length,
+          );
 
-        setIsTransitioning(false);
-      }, 350);
-    }, 5000);
+          setIsTransitioning(false);
+        }, 350);
+      }, 5000);
 
     return () =>
       window.clearInterval(
         interval,
       );
-  }, [slideshowCharacters.length]);
+  }, [
+    slideshowCharacters.length,
+  ]);
 
   useEffect(() => {
     if (
@@ -802,15 +1197,18 @@ export function DashboardPage() {
   ]);
 
   const featured =
-    slideshowCharacters[slideIndex] ??
+    slideshowCharacters[
+    slideIndex
+    ] ??
     slideshowCharacters[0];
 
-  const featuredImages = featured
-    ? characterImageSources(
-      featured,
-      'card',
-    )
-    : [];
+  const featuredImages =
+    featured
+      ? characterImageSources(
+        featured,
+        'card',
+      )
+      : [];
 
   return (
     <div className="home-page">
@@ -831,14 +1229,15 @@ export function DashboardPage() {
           </div>
 
           <h1>
-            Build your characters. Plan your
-            adventure.
+            Build your characters.
+            Plan your adventure.
           </h1>
 
           <p className="hero-description">
-            Find builds, weapons, artifacts,
-            teams, materials, and more in one
-            place.
+            Find builds, weapons,
+            artifacts, teams,
+            materials, and more
+            in one place.
           </p>
 
           <div className="hero-actions">
@@ -901,7 +1300,8 @@ export function DashboardPage() {
           {featured && (
             <div
               style={{
-                position: 'absolute',
+                position:
+                  'absolute',
                 inset: 0,
                 opacity:
                   isTransitioning
@@ -916,8 +1316,12 @@ export function DashboardPage() {
               }}
             >
               <AsyncImage
-                src={featuredImages}
-                alt={featured.name}
+                src={
+                  featuredImages
+                }
+                alt={
+                  featured.name
+                }
                 className="home-hero__character"
                 assetKey={assetKey(
                   'characters',
@@ -928,7 +1332,9 @@ export function DashboardPage() {
 
               <div className="home-hero__caption">
                 <span>
-                  {featured.name}
+                  {
+                    featured.name
+                  }
                 </span>
 
                 <small>
@@ -960,8 +1366,9 @@ export function DashboardPage() {
             </h3>
 
             <p>
-              See builds, stats, talents,
-              teams, and materials for every
+              See builds, stats,
+              talents, teams, and
+              materials for every
               character.
             </p>
 
@@ -982,8 +1389,9 @@ export function DashboardPage() {
             </h3>
 
             <p>
-              Check weapon stats and find
-              weapons that fit your
+              Check weapon stats
+              and find weapons
+              that fit your
               characters.
             </p>
 
@@ -1004,8 +1412,10 @@ export function DashboardPage() {
             </h3>
 
             <p>
-              Check artifact sets, bonuses,
-              and which characters use them.
+              Check artifact
+              sets, bonuses, and
+              which characters use
+              them.
             </p>
 
             <span>
@@ -1025,8 +1435,9 @@ export function DashboardPage() {
             </h3>
 
             <p>
-              Put four characters together
-              and save the teams you want
+              Put four characters
+              together and save
+              the teams you want
               to try.
             </p>
 
@@ -1055,11 +1466,14 @@ export function DashboardPage() {
             <Link
               to="/map"
               style={{
-                display: 'flex',
-                alignItems: 'center',
+                display:
+                  'flex',
+                alignItems:
+                  'center',
                 gap: '10px',
                 width: '100%',
-                textDecoration: 'none',
+                textDecoration:
+                  'none',
               }}
             >
               <Compass size={15} />
@@ -1090,11 +1504,14 @@ export function DashboardPage() {
             <Link
               to="/guides"
               style={{
-                display: 'flex',
-                alignItems: 'center',
+                display:
+                  'flex',
+                alignItems:
+                  'center',
                 gap: '10px',
                 width: '100%',
-                textDecoration: 'none',
+                textDecoration:
+                  'none',
               }}
             >
               <BookOpen size={15} />
@@ -1125,11 +1542,14 @@ export function DashboardPage() {
             <Link
               to="/teams"
               style={{
-                display: 'flex',
-                alignItems: 'center',
+                display:
+                  'flex',
+                alignItems:
+                  'center',
                 gap: '10px',
                 width: '100%',
-                textDecoration: 'none',
+                textDecoration:
+                  'none',
               }}
             >
               <Users size={15} />
@@ -1162,8 +1582,10 @@ export function DashboardPage() {
       <section
         className="callout home-callout"
         style={{
-          display: 'flex',
-          alignItems: 'center',
+          display:
+            'flex',
+          alignItems:
+            'center',
           justifyContent:
             'space-between',
           gap: '24px',
@@ -1179,16 +1601,17 @@ export function DashboardPage() {
           </div>
 
           <h3>
-            Pick a character and see
-            everything you need to
-            build them.
+            Pick a character
+            and see everything
+            you need to build
+            them.
           </h3>
 
           <p>
             Check their weapons,
             artifacts, talents,
-            teams, and materials in
-            one place.
+            teams, and materials
+            in one place.
           </p>
         </div>
 
