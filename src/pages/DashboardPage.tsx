@@ -241,7 +241,7 @@ export function DashboardPage() {
 
           <div className="hero-stats">
             <div>
-              <strong>{loading ? '鈥�' : allCharacters.length}</strong>
+              <strong>{loading ? '→' : allCharacters.length}</strong>
               <span>characters</span>
             </div>
 
@@ -251,7 +251,7 @@ export function DashboardPage() {
             </div>
 
             <div>
-              <strong>鈭�</strong>
+              <strong>→</strong>
               <span>builds to explore</span>
             </div>
           </div>
