@@ -534,6 +534,11 @@ body::before {
 .map-frame-wrap { background: #09141f; }
 .map-loading-state { background: radial-gradient(circle at center, rgba(79,141,187,.12), transparent 35%), #07111b; }
 .map-help { background: rgba(6,17,28,.96); }
+.official-map-embed { padding: 0; overflow: hidden; }
+.official-map-frame-wrap { position: relative; min-height: min(76vh, 900px); background: #07111d; }
+.official-map-frame-wrap iframe { display: block; width: 100%; height: min(76vh, 900px); min-height: 650px; border: 0; background: #07111d; }
+.official-map-embed .map-help { padding: 12px 16px; }
+.official-map-embed .map-help a { margin-left: auto; }
 
 @media (max-width: 1100px) {
   .home-hero { grid-template-columns: 1fr; min-height: auto; }
@@ -651,6 +656,8 @@ button:focus-visible, a:focus-visible, input:focus-visible, select:focus-visible
   .weapon-material-table .player-material-row { grid-template-columns: 30px minmax(0, 1fr) auto; }
   .stat-table { font-size: 11px; }
   .stat-table th, .stat-table td { padding: 8px 9px; }
+  .official-map-frame-wrap, .official-map-frame-wrap iframe { min-height: 72vh; height: 72vh; }
+  .official-map-embed .map-help a { margin-left: 0; }
 }
 
 @media (max-width: 390px) {
