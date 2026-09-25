@@ -49,6 +49,7 @@ type PaimonContextValue = PaimonContextState & {
 const PaimonContext = createContext<PaimonContextValue | null>(null);
 
 const PAIMON_AFK_TIME = 2 * 60 * 1000;
+const PAIMON_AFK_BORED_CYCLES = 3;
 const PAIMON_ANGER_HIDE_TIME = 10 * 1000;
 const PAIMON_MOVE_DURATION = 3200;
 const PAIMON_WIDTH = 190;
@@ -123,6 +124,58 @@ function randomItem<T>(items: T[]): T {
   return items[Math.floor(Math.random() * items.length)];
 }
 
+function getInitialGreeting(): string {
+  const hour = new Date().getHours();
+
+  if (hour >= 5 && hour < 12) {
+    return randomItem([
+      'Good morning! Ready for adventure?',
+      'Morning! What are we doing today?',
+    ]);
+  }
+
+  if (hour >= 12 && hour < 18) {
+    return randomItem([
+      'Good afternoon! What should we do?',
+      'Afternoon already! Where should we go?',
+    ]);
+  }
+
+  if (hour >= 18 && hour < 22) {
+    return randomItem([
+      'Good evening! Still exploring?',
+      'Evening already? Time flies!',
+    ]);
+  }
+
+  return randomItem([
+    "It's pretty late... still up for adventure?",
+    "Isn't it past Paimon's bedtime?",
+  ]);
+}
+
+function getElementLabel(element: Element): string | null {
+  const htmlElement = element as HTMLElement;
+  const raw =
+    htmlElement.getAttribute('aria-label') ||
+    htmlElement.getAttribute('title') ||
+    htmlElement.textContent ||
+    '';
+
+  const cleaned = raw.replace(/\s+/g, ' ').trim();
+  if (cleaned.length < 2 || cleaned.length > 32) return null;
+  return cleaned;
+}
+
+function buildElementLines(label: string): string[] {
+  return [
+    `Ooh, "${label}"?`,
+    `Are we clicking on ${label}?`,
+    `Paimon sees you picked ${label}!`,
+    `${label}? Let's see what happens!`,
+    `Checking out ${label}, huh?`,
+  ];
+}
 
 export function PaimonCompanion() {
   const { page, name, shown } = usePaimonContext();
@@ -135,7 +188,7 @@ export function PaimonCompanion() {
   const [position, setPosition] = useState({ x: 74, y: 65 });
   const [isAfk, setIsAfk] = useState(false);
   const [afkHidden, setAfkHidden] = useState(false);
-  const [speech, setSpeech] = useState('How are you doing?');
+  const [speech, setSpeech] = useState<string>(() => getInitialGreeting());
 
   const actionTimeoutRef = useRef<number | null>(null);
   const movementTimeoutRef = useRef<number | null>(null);
@@ -149,6 +202,8 @@ export function PaimonCompanion() {
   const isAfkRef = useRef(isAfk);
   const presenceRef = useRef(presence);
   const afkHiddenRef = useRef(afkHidden);
+  const lastSpeechRef = useRef<string>(speech);
+  const afkBoredCountRef = useRef(0);
 
   visibleRef.current = visible;
   isAfkRef.current = isAfk;
@@ -162,9 +217,9 @@ export function PaimonCompanion() {
     waving: 3,
     jumping: 4,
     failed: 5,
-    waiting: 6,
+    waiting: 7,
     running: 1,
-    review: 7,
+    review: 6,
   };
 
   function clearActionTimeout() {
@@ -204,6 +259,32 @@ export function PaimonCompanion() {
       window.clearTimeout(popInTimeoutRef.current);
       popInTimeoutRef.current = null;
     }
+  }
+
+  // Picks a line while avoiding an immediate repeat of whatever Paimon just said.
+  function pickSpeech(lines: string[], fallback = 'Paimon is here!'): string {
+    if (!lines.length) return fallback;
+    const pool =
+      lines.length > 1
+        ? lines.filter((line) => line !== lastSpeechRef.current)
+        : lines;
+    return randomItem(pool.length ? pool : lines);
+  }
+
+  // Single choke point for updating the speech bubble, so anti-repeat tracking
+  // stays accurate no matter which code path changes what Paimon is saying.
+  function say(text: string) {
+    lastSpeechRef.current = text;
+    setSpeech(text);
+  }
+
+  // Same anti-repeat idea as pickSpeech, but for {text, action} reaction pairs.
+  function pickReaction<T extends { text: string }>(items: T[]): T {
+    const pool =
+      items.length > 1
+        ? items.filter((item) => item.text !== lastSpeechRef.current)
+        : items;
+    return randomItem(pool.length ? pool : items);
   }
 
   function getContextLines(): string[] {
@@ -313,8 +394,7 @@ export function PaimonCompanion() {
   }
 
   function getRandomPaimonLine() {
-    const lines = getContextLines();
-    return lines.length ? randomItem(lines) : 'Paimon is here!';
+    return pickSpeech(getContextLines());
   }
 
   function getRandomTrivia() {
@@ -369,7 +449,28 @@ export function PaimonCompanion() {
     };
 
     const entries = trivia[page];
-    return entries.length ? randomItem(entries) : 'Paimon is thinking...';
+    return pickSpeech(entries, 'Paimon is thinking...');
+  }
+
+  function getAngryLine(clickCount: number): string {
+    if (clickCount === 3) return 'HEY! Stop poking Paimon!';
+
+    if (clickCount <= 5) {
+      return pickSpeech(['Paimon said STOP!', 'Quit it!', 'That tickles, but stop!']);
+    }
+
+    if (clickCount <= 8) {
+      return pickSpeech([
+        'Paimon is getting really annoyed now!',
+        'Okay, that is enough!',
+        'Paimon is warning you!',
+      ]);
+    }
+
+    return pickSpeech([
+      'One more time, Paimon swears...',
+      'Paimon is about to lose it!',
+    ]);
   }
 
   function playTemporaryAction(
@@ -384,12 +485,15 @@ export function PaimonCompanion() {
     actionBusyRef.current = true;
     setFrame(0);
     setAction(nextAction);
+    // Show the reaction line right away instead of leaving the old speech
+    // bubble up for the whole animation and only revealing it at the end.
+    say(nextSpeech ?? getRandomPaimonLine());
 
     actionTimeoutRef.current = window.setTimeout(() => {
       actionBusyRef.current = false;
       setFrame(0);
       setAction('idle');
-      setSpeech(nextSpeech ?? getRandomPaimonLine());
+      say(getRandomPaimonLine());
       actionTimeoutRef.current = null;
     }, duration);
   }
@@ -398,6 +502,7 @@ export function PaimonCompanion() {
     if (disabled || !shown) return;
 
     setIsAfk(false);
+    afkBoredCountRef.current = 0;
     clearAfkTimeout();
 
     afkTimeoutRef.current = window.setTimeout(() => {
@@ -407,30 +512,18 @@ export function PaimonCompanion() {
       clearActionTimeout();
       clearMovementTimeout();
       clearNormalBehaviorTimeout();
-      actionBusyRef.current = true;
+      actionBusyRef.current = false;
+      afkBoredCountRef.current = 0;
 
       setFrame(0);
       setAction('waiting');
-      setSpeech(randomItem([
-        'Paimon is getting sleepy... see you in a bit.',
-        'Mmm... Paimon needs a little rest...',
-        'Zzz... Paimon is getting sleepy...',
-        'Traveler... Paimon is gonna take a quick nap...',
+      say(pickSpeech([
+        'Traveler...?',
+        'Is there something interesting over there?',
+        'Should we go exploring?',
       ]));
-
-      window.setTimeout(() => {
-        if (!shown || disabled) {
-          actionBusyRef.current = false;
-          return;
-        }
-
-        setAfkHidden(true);
-        setVisible(false);
-        setPresence('visible');
-        setAction('idle');
-        setFrame(0);
-        actionBusyRef.current = false;
-      }, 1800);
+      // The bored-check-in loop below picks it up from here and puts
+      // Paimon to sleep after a few unanswered check-ins.
     }, PAIMON_AFK_TIME);
   }
 
@@ -676,7 +769,7 @@ export function PaimonCompanion() {
     playTemporaryAction(
       behavior.action,
       behavior.duration,
-      randomItem(behavior.lines),
+      pickSpeech(behavior.lines),
     );
   }
 
@@ -721,13 +814,19 @@ export function PaimonCompanion() {
     resetAfkTimer();
     moveNearElement(interactive);
 
-    const messages = getContextLines();
-    const line =
-      Math.random() < 0.25
-        ? getRandomTrivia()
-        : randomItem(messages.length ? messages : ['Paimon wants to see!']);
+    const label = getElementLabel(interactive);
+    let line: string;
 
-    playTemporaryAction('waving', 1400, line);
+    if (label && Math.random() < 0.45) {
+      line = pickSpeech(buildElementLines(label));
+    } else if (Math.random() < 0.25) {
+      line = getRandomTrivia();
+    } else {
+      const messages = getContextLines();
+      line = pickSpeech(messages.length ? messages : ['Paimon wants to see!']);
+    }
+
+    playTemporaryAction('waiting', 1400, line);
   }
 
   function wakeFromAfk() {
@@ -742,7 +841,7 @@ export function PaimonCompanion() {
     actionBusyRef.current = true;
     setFrame(0);
     setAction('jumping');
-    setSpeech(randomItem([
+    say(pickSpeech([
       'Paimon is awake!',
       'Oh! Something happened!',
       'Paimon is back!',
@@ -785,7 +884,7 @@ export function PaimonCompanion() {
       actionBusyRef.current = true;
       setIsAfk(false);
       setFrame(0);
-      setSpeech('ENOUGH! Leave Paimon alone!');
+      say('ENOUGH! Leave Paimon alone!');
       setAction('failed');
       setPresence('exiting');
 
@@ -800,7 +899,7 @@ export function PaimonCompanion() {
         setVisible(true);
         setFrame(0);
         setAction('idle');
-        setSpeech(Math.random() < 0.5 ? 'Paimon is back...' : getRandomPaimonLine());
+        say(Math.random() < 0.5 ? 'Paimon is back...' : getRandomPaimonLine());
         setPresence('entering');
 
         window.setTimeout(() => {
@@ -821,14 +920,14 @@ export function PaimonCompanion() {
       actionBusyRef.current = true;
       setIsAfk(false);
       setFrame(0);
-      setSpeech(clickCount === 3 ? 'HEY! Stop poking Paimon!' : 'Paimon said STOP!');
+      say(getAngryLine(clickCount));
       setAction('failed');
 
       actionTimeoutRef.current = window.setTimeout(() => {
         actionBusyRef.current = false;
         setFrame(0);
         setAction('idle');
-        setSpeech(getRandomPaimonLine());
+        say(getRandomPaimonLine());
         actionTimeoutRef.current = null;
         scheduleNextNormalBehavior();
       }, 1800);
@@ -837,7 +936,7 @@ export function PaimonCompanion() {
     }
 
     resetAfkTimer();
-    const reaction = randomItem([
+    const reaction = pickReaction([
       { text: 'Why are you poking Paimon?', action: 'waving' as PaimonAction },
       { text: 'What?', action: 'jumping' as PaimonAction },
       { text: 'Did you need something?', action: 'waiting' as PaimonAction },
@@ -852,10 +951,10 @@ export function PaimonCompanion() {
     if (!visible || disabled || !shown) return;
 
     const frameSequences: Record<PaimonAction, number[]> = {
-      idle: [0, 1, 2, 3, 5, 6, 7],
-      'running-right': [0, 1],
-      'running-left': [6, 7],
-      waving: [0, 1, 2, 3, 4, 5, 6, 7],
+      idle: [0, 1, 2, 4, 2, 3, 6, 7],
+      'running-right': [0, 1, 2, 3, 4, 5, 6, 7],
+      'running-left': [0, 1, 2, 3, 4, 5, 6, 7],
+      waving: [5, 1, 2, 3, 4, 5, 6, 5],
       jumping: [0, 1, 2, 3, 4, 5, 6, 7],
       failed: [0, 1, 2, 3, 4, 5, 6, 7],
       waiting: [0, 1, 2, 3, 4, 5, 6, 7],
@@ -938,7 +1037,7 @@ export function PaimonCompanion() {
     actionBusyRef.current = true;
     setFrame(0);
     setAction('waving');
-    setSpeech(randomItem(lines));
+    say(pickSpeech(lines));
 
     actionTimeoutRef.current = window.setTimeout(() => {
       actionBusyRef.current = false;
@@ -964,10 +1063,41 @@ export function PaimonCompanion() {
     const interval = window.setInterval(() => {
       if (actionBusyRef.current) return;
 
+      afkBoredCountRef.current += 1;
+
+      // After a few unanswered check-ins, stop nagging and actually nap/hide.
+      if (afkBoredCountRef.current > PAIMON_AFK_BORED_CYCLES) {
+        clearActionTimeout();
+        actionBusyRef.current = true;
+        setFrame(0);
+        setAction('waiting');
+        say(pickSpeech([
+          'Paimon is getting sleepy... see you in a bit.',
+          'Mmm... Paimon needs a little rest...',
+          'Zzz... Paimon is getting sleepy...',
+          'Traveler... Paimon is gonna take a quick nap...',
+        ]));
+
+        window.setTimeout(() => {
+          if (!shown || disabled) {
+            actionBusyRef.current = false;
+            return;
+          }
+
+          setAfkHidden(true);
+          setVisible(false);
+          setPresence('visible');
+          setAction('idle');
+          setFrame(0);
+          actionBusyRef.current = false;
+        }, 1800);
+        return;
+      }
+
       playTemporaryAction(
         'waiting',
         2200,
-        randomItem([
+        pickSpeech([
           'Traveler...?',
           'Paimon is getting hungry...',
           'Is there something interesting over there?',
