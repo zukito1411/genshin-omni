@@ -1,5 +1,6 @@
 import { getJson } from './http';
 import type { EnkaMetadata, EnkaProfile } from '../types/enka';
+import { fetchArtifactNames } from './artifactNames';
 
 const BASE_URL = 'https://enka.network/api';
 
@@ -65,7 +66,7 @@ export async function fetchEnkaMetadata(signal?: AbortSignal, forceRefresh = fal
   const options = { ttlMs: 24 * 60 * 60 * 1000, staleOnError: true, forceRefresh };
   const requestSignal = signal ?? AbortSignal.timeout(20_000);
   const load = <T,>(file: string) => getJson<T>(`${base}/${file}.json`, requestSignal, { ...options, cacheKey: `enka:metadata:v2:${file}` });
-  const [characters, localization, legacyLocalization, namecards, profilePictures, weapons, relics, curves, relicLevels, affixes] = await Promise.all([
+  const [characters, localization, legacyLocalization, namecards, profilePictures, weapons, relics, curves, relicLevels, affixes, artifactNames] = await Promise.all([
     load<EnkaMetadata['characters']>('gi/avatars').catch(() => load<EnkaMetadata['characters']>('characters')),
     load<Record<string, Record<string, string>>>('gi/locs').catch(() => load<Record<string, Record<string, string>>>('loc')),
     // The current catalog uses set names, while older snapshots can still
@@ -78,6 +79,7 @@ export async function fetchEnkaMetadata(signal?: AbortSignal, forceRefresh = fal
     load<NonNullable<EnkaMetadata['curves']>>('gi/curves').catch(() => ({})),
     load<NonNullable<EnkaMetadata['relicLevels']>>('gi/relic_levels').catch(() => ({})),
     load<NonNullable<EnkaMetadata['affixes']>>('gi/affixes').catch(() => ({})),
+    fetchArtifactNames(requestSignal, forceRefresh),
   ]);
-  return { characters, text: { ...('en' in legacyLocalization ? legacyLocalization.en : {}), ...(localization.en ?? {}) }, namecards, profilePictures, weapons, relics, curves, relicLevels, affixes };
+  return { characters, text: { ...('en' in legacyLocalization ? legacyLocalization.en : {}), ...(localization.en ?? {}) }, namecards, profilePictures, weapons, relics, curves, relicLevels, affixes, artifactNames };
 }

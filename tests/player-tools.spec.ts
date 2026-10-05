@@ -3,9 +3,10 @@ import type { EnkaProfile } from '../src/types/enka';
 
 const artifactSlots = ['flower', 'plume', 'sands', 'goblet', 'circlet'];
 const artifactIcons = [4, 2, 5, 1, 3].map((slot) => `UI_RelicIcon_14001_${slot}`);
+const artifactPieceNames = ['Snowswept Memory', "Icebreaker's Resolve", "Frozen Homeland's Demise", 'Frost-Weaved Dignity', "Broken Rime's Echo"];
 const artifactSet = {
   id: 14001, name: 'Blizzard Strayer', rarityList: [4, 5], effect2Pc: 'Cryo DMG Bonus +15%', effect4Pc: 'CRIT Rate increases against Frozen opponents.',
-  ...Object.fromEntries(artifactSlots.map((slot) => [slot, { name: `${slot} of Blizzard Strayer` }])),
+  ...Object.fromEntries(artifactSlots.map((slot, index) => [slot, { name: artifactPieceNames[index], relicType: ['EQUIP_BRACER', 'EQUIP_NECKLACE', 'EQUIP_SHOES', 'EQUIP_RING', 'EQUIP_DRESS'][index] }])),
   images: Object.fromEntries(artifactSlots.map((slot, index) => [`filename_${slot}`, artifactIcons[index]])),
 };
 const weapon = { id: 11509, name: 'Mistsplitter Reforged', rarity: 5, weaponText: 'Sword', images: { filename_icon: 'UI_EquipIcon_Sword_Narukami' }, r1: { description: 'Gain an Elemental DMG Bonus.' }, costs: { ascension1: [{ name: 'Mora', count: 10000 }] } };
@@ -137,7 +138,7 @@ test('current metadata resolves character variants, relative artwork, and abbrev
   await expect(equipped.locator('.build-stat-list')).toContainText('674');
   await expect(equipped.locator('.build-stat-list')).toContainText('44.1%');
   const artifact = page.locator('.equipped-artifact-grid .equipped-item').first();
-  await expect(artifact).toContainText('Blizzard Strayer · Flower');
+  await expect(artifact).toContainText('Snowswept Memory');
   await expect(artifact).toContainText('46.6%');
   await expect(artifact).toContainText('7.8%');
   await expect(page.locator('img.showcase-build-hero__image')).toHaveAttribute('src', /UI_Gacha_AvatarImg_Ayaka\.png/);
@@ -177,6 +178,48 @@ test('searching the same UID refreshes previously cached metadata and equipment'
   await expect(page.locator('.showcase-card--link')).toContainText('Updated character name');
 });
 
+test('all five artifact pieces resolve by exact icons without localized name hashes', async ({ page }) => {
+  await page.setViewportSize({ width: 320, height: 740 });
+  await mockSources(page);
+  const abbreviated: EnkaProfile = structuredClone(profile);
+  for (const item of abbreviated.avatarInfoList![0].equipList!.filter((item) => item.reliquary)) {
+    delete item.flat!.nameTextMapHash;
+    delete item.flat!.setNameTextMapHash;
+  }
+  await page.route('**/api/uid/**', (route) => route.fulfill({ json: abbreviated }));
+  await page.goto('/profile/800000001/characters/10000002-201');
+  const cards = page.locator('.equipped-artifact-grid .equipped-item');
+  await expect(cards).toHaveCount(5);
+  for (let index = 0; index < artifactPieceNames.length; index++) {
+    await expect(cards.nth(index).getByRole('heading')).toHaveText(artifactPieceNames[index]);
+    await expect(cards.nth(index).locator('.equipped-item__set')).toHaveText('Blizzard Strayer');
+    await expect(cards.nth(index)).toContainText('46.6%');
+  }
+  await expect(page.locator('.artifact-set-summary')).toContainText('Blizzard Strayer · 5 pieces');
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
+  await page.reload();
+  await expect(page.getByRole('heading', { name: 'Snowswept Memory' })).toBeVisible();
+});
+
+test('artifact names survive a catalog outage and mixed sets stay distinct', async ({ page }) => {
+  await mockSources(page);
+  const mixed: EnkaProfile = structuredClone(profile);
+  const artifacts = mixed.avatarInfoList![0].equipList!.filter((item) => item.reliquary);
+  for (const item of artifacts) {
+    delete item.flat!.nameTextMapHash;
+    delete item.flat!.setNameTextMapHash;
+  }
+  artifacts[4].flat!.icon = '/ui/UI_RelicIcon_15002_3.png';
+  await page.route('**/api/uid/**', (route) => route.fulfill({ json: mixed }));
+  await page.route('**/api/v5/artifacts?**', (route) => route.fulfill({ status: 403 }));
+  await page.goto('/profile/800000001/characters/10000002-201');
+  await expect(page.getByRole('heading', { name: 'Snowswept Memory' })).toBeVisible();
+  await expect(page.locator('.equipped-artifact-grid .equipped-item').last().locator('.equipped-item__set')).toHaveText('Viridescent Venerer');
+  await expect(page.locator('.artifact-set-summary')).toContainText('Blizzard Strayer · 4 pieces');
+  await expect(page.locator('.artifact-set-summary')).toContainText('Viridescent Venerer · 1 pieces');
+  await expect(page.locator('.equipped-artifact-grid')).not.toContainText('unavailable');
+});
+
 test('unknown artifact rolls never become misleading partial substat totals', async ({ page }) => {
   await mockSources(page);
   const incomplete: EnkaProfile = structuredClone(profile);
@@ -196,7 +239,7 @@ test('mobile builds fit narrow screens and stats work when metadata is unavailab
   await expect(page.locator('.equipped-artifact-grid .equipped-item')).toHaveCount(5);
   await expect(page.getByRole('heading', { name: 'Character name unavailable', exact: true })).toBeVisible();
   await expect(page.getByRole('heading', { name: 'Weapon name unavailable', exact: true })).toBeVisible();
-  await expect(page.locator('.equipped-artifact-grid .equipped-item').first()).toContainText('Flower name unavailable');
+  await expect(page.locator('.equipped-artifact-grid .equipped-item').first()).toContainText('Snowswept Memory');
   await expect(page.locator('.showcase-talents')).toContainText('Shared talent');
   expect(await page.locator('body').innerText()).not.toMatch(/\b(?:Character|Item|Weapon|Artifact|Set|Talent)\s+\d{3,}\b/i);
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
@@ -233,7 +276,7 @@ test('blank or numeric localization entries cannot masquerade as display names',
   await page.goto('/profile/800000001/characters/10000002-201');
   await expect(page.getByRole('heading', { name: 'Character name unavailable' })).toBeVisible();
   await expect(page.getByRole('heading', { name: 'Weapon name unavailable' })).toBeVisible();
-  await expect(page.getByRole('heading', { name: 'Flower name unavailable' })).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'Snowswept Memory' })).toBeVisible();
   await expect(page.locator('.equipped-item').first()).toContainText('674');
   await expect(page.locator('.equipped-item').first()).toContainText('44.1%');
 });

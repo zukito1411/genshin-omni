@@ -1,5 +1,7 @@
 import type { EnkaEquipment, EnkaMetadata, EnkaStat } from '../types/enka';
 import { ARTIFACT_SLOTS, enkaText } from './enka';
+import { artifactIconKey } from '../api/artifactNames';
+import { bundledArtifactNames } from '../data/artifactNames';
 
 const SLOT_IDS = Object.keys(ARTIFACT_SLOTS);
 const PROP_IDS: Record<string, string> = {
@@ -12,6 +14,12 @@ const PROP_IDS: Record<string, string> = {
   '45': 'FIGHT_PROP_ROCK_ADD_HURT', '46': 'FIGHT_PROP_ICE_ADD_HURT',
 };
 const validValue = (stat?: EnkaStat) => Number.isFinite(stat?.statValue ?? stat?.propValue);
+
+function artifactDefinition(item: EnkaEquipment, metadata: EnkaMetadata | null) {
+  const icon = item.flat?.icon || metadata?.relics?.Items?.[String(item.itemId)]?.Icon;
+  const key = artifactIconKey(icon);
+  return metadata?.artifactNames?.[key] ?? bundledArtifactNames[key];
+}
 
 function catalogStat(prop: string, value: number): EnkaStat | undefined {
   const id = PROP_IDS[prop];
@@ -56,9 +64,11 @@ export function resolveEquipment(item: EnkaEquipment, metadata: EnkaMetadata | n
   }
 
   const data = metadata?.relics?.Items?.[String(item.itemId)];
+  const definition = artifactDefinition(item, metadata);
   flat.rankLevel ??= data?.Rarity;
   flat.icon ??= data?.Icon;
   flat.equipType ??= data?.EquipType === undefined ? undefined : SLOT_IDS[data.EquipType];
+  flat.equipType ??= definition?.equipType;
   flat.setNameTextMapHash ??= metadata?.relics?.Sets?.[String(data?.SetId)]?.Name;
   const main = flat.reliquaryMainstat;
   if (main && !validValue(main)) {
@@ -82,19 +92,23 @@ export function resolveEquipment(item: EnkaEquipment, metadata: EnkaMetadata | n
     });
     flat.reliquarySubstats = mergeStats(flat.reliquarySubstats, stats);
   }
-  return { ...item, flat };
+  return { ...item, flat, resolvedName: definition?.name ?? item.resolvedName, resolvedSetName: definition?.setName ?? item.resolvedSetName };
 }
 
 export function equipmentName(item: EnkaEquipment, metadata: EnkaMetadata | null): string {
   const flat = item.flat;
-  const name = enkaText(flat?.nameTextMapHash, metadata, '');
+  const name = item.resolvedName || enkaText(flat?.nameTextMapHash, metadata, '');
   if (name) return name;
   if (!item.weapon && flat?.itemType !== 'ITEM_WEAPON') {
-    const set = enkaText(flat?.setNameTextMapHash, metadata, '');
+    const set = equipmentSetName(item, metadata, '');
     const slot = ARTIFACT_SLOTS[flat?.equipType as keyof typeof ARTIFACT_SLOTS] ?? 'Artifact';
     if (set) return `${set} · ${slot}`;
   }
   if (item.weapon || flat?.itemType === 'ITEM_WEAPON') return 'Weapon name unavailable';
   const slot = ARTIFACT_SLOTS[flat?.equipType as keyof typeof ARTIFACT_SLOTS] ?? 'Artifact';
   return `${slot} name unavailable`;
+}
+
+export function equipmentSetName(item: EnkaEquipment, metadata: EnkaMetadata | null, fallback = 'Set name unavailable'): string {
+  return enkaText(item.flat?.setNameTextMapHash, metadata, '') || item.resolvedSetName || fallback;
 }

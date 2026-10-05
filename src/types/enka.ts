@@ -7,6 +7,8 @@ export interface EnkaStat {
 }
 
 export interface EnkaEquipment {
+  resolvedName?: string;
+  resolvedSetName?: string;
   itemId?: number;
   weapon?: { level?: number; promoteLevel?: number; affixMap?: Record<string, number> };
   reliquary?: { level?: number; mainPropId?: number; appendPropIdList?: number[] };
@@ -74,6 +76,7 @@ export interface EnkaCharacterMetadata {
 }
 
 export interface EnkaMetadata {
+  artifactNames?: ArtifactNameCatalog;
   characters: Record<string, EnkaCharacterMetadata>;
   text: Record<string, string>;
   namecards?: Record<string, { icon?: string; Icon?: string }>;
@@ -84,3 +87,5 @@ export interface EnkaMetadata {
   relicLevels?: Record<string, Record<string, Record<string, number>>>;
   affixes?: Record<string, { PropType: number; Value: number }>;
 }
+
+export type ArtifactNameCatalog = Record<string, { name: string; setName: string; equipType?: string; setId?: number }>;

@@ -91,6 +91,10 @@ artifact main stats and substats use level tables and the snapshot's individual
 roll IDs. Supplied values always take precedence, and unknown rolls are not
 presented as partial totals. Searching the same UID refreshes its data and definitions.
 
+Individual artifact-piece names resolve by exact game icon identifiers through
+GenshinDB. A compact bundled catalog preserves known piece/set names during
+provider outages, even when public snapshots omit their name hashes.
+
 On touch devices and screens up to 700px wide, hold the Paimon bubble briefly and drag it.
 Releasing docks it halfway against the nearest edge and remembers the position
 on this device. A tap opens the helper.

@@ -7,8 +7,8 @@ import { SectionTitle } from '../components/SectionTitle';
 import { usePaimonContext } from '../components/PaimonCompanion';
 import { useEnkaProfile } from '../hooks/useEnkaProfile';
 import type { EnkaEquipment, EnkaMetadata } from '../types/enka';
-import { equipmentName, resolveEquipment } from '../utils/enkaEquipment';
-import { ARTIFACT_SLOTS, avatarArtwork, avatarElement, avatarKey, avatarLevel, avatarMetadata, avatarName, COMBAT_STATS, combatValue, enkaImage, enkaText, equipmentStat } from '../utils/enka';
+import { equipmentName, equipmentSetName, resolveEquipment } from '../utils/enkaEquipment';
+import { ARTIFACT_SLOTS, avatarArtwork, avatarElement, avatarKey, avatarLevel, avatarMetadata, avatarName, COMBAT_STATS, combatValue, enkaImage, equipmentStat } from '../utils/enka';
 
 function EquipmentCard({ item, metadata, title }: { item: EnkaEquipment; metadata: EnkaMetadata | null; title: string }) {
   const flat = item.flat;
@@ -23,7 +23,7 @@ function EquipmentCard({ item, metadata, title }: { item: EnkaEquipment; metadat
     ];
   return <article className={`panel equipped-item rarity-${flat?.rankLevel ?? 0}`}>
     <div className="equipped-item__head"><AsyncImage src={enkaImage(flat?.icon)} alt="" className="equipped-item__image" assetKey={`${weapon ? 'weapons' : 'artifacts'}:${item.itemId ?? flat?.icon}`} fallback={<AssetPlaceholder kind={weapon ? 'weapon' : 'artifact'} />} /><div><div className="eyebrow">{title}</div><h3>{equipmentName(item, metadata)}</h3><p>{flat?.rankLevel ? `${flat.rankLevel}★ · ` : ''}{weapon ? `Level ${weapon.level ?? '—'} · R${refinement ?? '—'}` : `+${item.reliquary?.level !== undefined ? Math.max(0, item.reliquary.level - 1) : '—'}`}</p></div></div>
-    {!weapon && <p className="equipped-item__set">{enkaText(flat?.setNameTextMapHash, metadata, 'Artifact set unavailable')}</p>}
+    {!weapon && <p className="equipped-item__set">{equipmentSetName(item, metadata)}</p>}
     <dl className="build-stat-list">{stats.map(({ stat, main }, index) => {
       const value = equipmentStat(stat);
       return <div className={main ? 'artifact-main-stat' : ''} key={`${value.label}-${index}`}><dt>{value.label}{main ? ' (main)' : ''}</dt><dd>{value.value}</dd></div>;
@@ -45,9 +45,11 @@ export function ShowcaseCharacterPage() {
   const equipment = avatar?.equipList?.map((item) => resolveEquipment(item, metadata)) ?? [];
   const weapon = equipment.find((item) => item.weapon || item.flat?.itemType === 'ITEM_WEAPON');
   const artifacts = equipment.filter((item) => item.reliquary || item.flat?.itemType === 'ITEM_RELIQUARY');
-  const setCounts = artifacts.reduce<Record<string, number>>((counts, item) => {
+  const setCounts = artifacts.reduce<Record<string, { name: string; count: number }>>((counts, item) => {
     const hash = item.flat?.setNameTextMapHash;
-    if (hash !== undefined) counts[String(hash)] = (counts[String(hash)] ?? 0) + 1;
+    const name = equipmentSetName(item, metadata, '');
+    const key = name ? `name:${name}` : hash === undefined ? undefined : `hash:${hash}`;
+    if (key) counts[key] = { name: name || 'Set name unavailable', count: (counts[key]?.count ?? 0) + 1 };
     return counts;
   }, {});
   const skills = info?.SkillOrder ?? Object.keys(avatar?.skillLevelMap ?? {}).map(Number);
@@ -66,7 +68,7 @@ export function ShowcaseCharacterPage() {
       <section className="section-block"><SectionTitle eyebrow="COMBAT STATS" title="Character attributes" description="These are the character’s shared equipped stats, including their weapon and artifacts." /><dl className="showcase-stats">{COMBAT_STATS.slice(0, 7).map(([id, label, percent]) => <div key={id}><dt>{label}</dt><dd>{combatValue(avatar.fightPropMap?.[id], percent)}</dd></div>)}{COMBAT_STATS.filter(([id]) => ['30', '40', '41', '42', '43', '44', '45', '46'].includes(id) && (avatar.fightPropMap?.[id] ?? 0) !== 0).map(([id, label, percent]) => <div key={id}><dt>{label}</dt><dd>{combatValue(avatar.fightPropMap?.[id], percent)}</dd></div>)}</dl><details className="showcase-additional-stats"><summary>Damage bonuses, resistances, and other attributes</summary><dl className="showcase-stats">{COMBAT_STATS.slice(7).map(([id, label, percent]) => <div key={id}><dt>{label}</dt><dd>{combatValue(avatar.fightPropMap?.[id], percent)}</dd></div>)}</dl></details></section>
       <section className="section-block"><SectionTitle eyebrow="EQUIPMENT" title="Weapon" />{weapon ? <EquipmentCard item={weapon} metadata={metadata} title="Equipped weapon" /> : <div className="empty-state">No equipped weapon was shared.</div>}</section>
       <section className="section-block"><SectionTitle eyebrow="EQUIPMENT" title="Artifacts" description="Each piece includes its main stat and all shared substats." />
-        {Object.keys(setCounts).length > 0 && <div className="artifact-set-summary">{Object.entries(setCounts).map(([hash, count]) => <span className="pill" key={hash}>{enkaText(hash, metadata, 'Set name unavailable')} · {count} pieces</span>)}</div>}
+        {Object.keys(setCounts).length > 0 && <div className="artifact-set-summary">{Object.entries(setCounts).map(([key, group]) => <span className="pill" key={key}>{group.name} · {group.count} pieces</span>)}</div>}
         <div className="equipped-artifact-grid">{Object.entries(ARTIFACT_SLOTS).map(([slot, label]) => {
           const item = artifacts.find((entry) => entry.flat?.equipType === slot);
           return item ? <EquipmentCard key={slot} item={item} metadata={metadata} title={label} /> : <article className="panel equipped-item" key={slot}><h3>{label}</h3><p>No piece shared for this slot.</p></article>;
