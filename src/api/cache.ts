@@ -5,6 +5,7 @@ export function readCache<T>(key:string):{value:T;stale:boolean;updatedAt:number
     const raw=localStorage.getItem(PREFIX+key);
     if(!raw)return null;
     const entry=JSON.parse(raw) as Entry<T>;
+    if(!entry || typeof entry !== 'object' || !Object.prototype.hasOwnProperty.call(entry,'value') || !Number.isFinite(entry.expiresAt) || !Number.isFinite(entry.updatedAt))return null;
     return {value:entry.value,stale:Date.now()>entry.expiresAt,updatedAt:entry.updatedAt};
   }catch{return null}
 }

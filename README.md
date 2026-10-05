@@ -85,6 +85,14 @@ owned roster, or detailed Abyss/Theater histories; missing fields remain unavail
 Artwork uses exact filenames from provider metadata with independent image
 fallbacks and decorative placeholders when no image can be downloaded.
 
+Images are loaded and decoded before being displayed, with near-viewport lazy
+loading and a separate remembered source for each artwork variant. Failed
+sources stay offscreen. Character kits merge complementary provider fields
+without duplicating talents or losing icons; missing combat/constellation icons
+can use Enka's game-ID-matched catalog. Unavailable optional sources settle into
+an unavailable state instead of retrying indefinitely. Shared HTTP requests have
+bounded retries/timeouts and can retain cached data during a provider outage.
+
 UID builds support both current and legacy equipment fields. Missing resolved
 weapon stats are calculated from the official catalog's level/ascension curves;
 artifact main stats and substats use level tables and the snapshot's individual

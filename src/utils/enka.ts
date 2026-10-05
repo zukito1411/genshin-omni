@@ -1,5 +1,6 @@
 import type { EnkaAvatar, EnkaCharacterMetadata, EnkaMetadata, EnkaProfile, EnkaStat } from '../types/enka';
 import { gameImageSources } from '../api/assets';
+import { gameText } from './gameText';
 
 export const PROFILE_UID_KEY = 'teyvat-atlas:profile-uid:v1';
 export const ARTIFACT_SLOTS = {
@@ -24,8 +25,9 @@ export function avatarMetadata(avatar: EnkaAvatar, metadata?: EnkaMetadata | nul
 }
 
 export function enkaText(hash: string | number | undefined, metadata?: EnkaMetadata | null, fallback = 'Name unavailable'): string {
-  const value = hash === undefined ? undefined : metadata?.text[String(hash)];
-  return typeof value === 'string' && value.trim() && !/^\d+$/.test(value.trim()) ? value.trim() : fallback;
+  const raw = hash === undefined ? undefined : metadata?.text[String(hash)];
+  const value = typeof raw === 'string' ? gameText(raw) : undefined;
+  return value && !/^\d+$/.test(value) ? value : fallback;
 }
 
 export function enkaImage(icon?: string): string[] {

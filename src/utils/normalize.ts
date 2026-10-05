@@ -1,4 +1,5 @@
 import type { GenshinCharacter, LibraryEntity } from '../types/genshin';
+import { gameText } from './gameText';
 
 export function slugify(value: string): string {
   return value.normalize('NFKD').replace(/[\u0300-\u036f]/g, '').toLowerCase().trim().replace(/[’']/g, '').replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
@@ -28,19 +29,23 @@ export function text(value: unknown): string | undefined {
 export function firstString(...values: unknown[]): string | undefined {
   for (const value of values) {
     const result = text(value);
-    if (result) return result;
+    if (result?.trim()) return result.trim();
   }
   return undefined;
 }
 
 function cleanElement(value?: string): string | undefined {
   if (!value) return undefined;
-  return value.replace(/^ELEMENT_/i, '').replace(/^AVATAR_(ELEMENT_)?/i, '').trim() || undefined;
+  const cleaned = value.replace(/^ELEMENT_/i, '').replace(/^AVATAR_(ELEMENT_)?/i, '').trim();
+  const names: Record<string, string> = { anemo: 'Anemo', wind: 'Anemo', geo: 'Geo', rock: 'Geo', electro: 'Electro', electric: 'Electro', dendro: 'Dendro', grass: 'Dendro', hydro: 'Hydro', water: 'Hydro', pyro: 'Pyro', fire: 'Pyro', cryo: 'Cryo', ice: 'Cryo' };
+  return names[cleaned.toLowerCase()] ?? (cleaned || undefined);
 }
 
 function cleanWeapon(value?: string): string | undefined {
   if (!value) return undefined;
-  return value.replace(/^WEAPON_/i, '').replace(/^EQUIP_/i, '').trim() || undefined;
+  const cleaned = value.replace(/^WEAPON_/i, '').replace(/^EQUIP_/i, '').trim();
+  const names: Record<string, string> = { sword: 'Sword', swordonehand: 'Sword', claymore: 'Claymore', swordtwohand: 'Claymore', bow: 'Bow', catalyst: 'Catalyst', pole: 'Polearm', spear: 'Polearm', polearm: 'Polearm' };
+  return names[cleaned.replace(/[\s_-]/g, '').toLowerCase()] ?? (cleaned || undefined);
 }
 
 function filenameValue(...values: unknown[]): string | undefined {
@@ -80,12 +85,12 @@ export function normalizeCharacter(payload: unknown, idHint = ''): GenshinCharac
     name,
     rarity: Number(raw.rarity ?? raw.stars ?? raw.rank ?? (raw.qualityType === 'QUALITY_ORANGE' ? 5 : raw.qualityType === 'QUALITY_PURPLE' ? 4 : 0)) || undefined,
     element: cleanElement(firstString(raw.elementText, raw.element, raw.elemType, raw.elementName, raw.elementType)),
-    weapon: cleanWeapon(firstString(raw.weaponText, raw.weapon, raw.weaponType, raw.type)),
+    weapon: cleanWeapon(firstString(raw.weaponText, raw.weapontype, raw.weapon, raw.weaponType, raw.type)),
     region: firstString(raw.region, raw.nation, raw.affiliation),
     birthday: firstString(raw.birthday, raw.birthdate),
     title: firstString(raw.title),
-    description: firstString(raw.description, raw.desc, raw.descriptionText),
-    quote: firstString(raw.quote, raw.flavorText),
+    description: gameText(firstString(raw.description, raw.desc, raw.descriptionText)),
+    quote: gameText(firstString(raw.quote, raw.flavorText)),
     images: {
       image: firstString(images.image, images.imageUrl, images.cover1),
       card: firstString(images.card, images.cardImage, images.gachaCard),
@@ -138,15 +143,15 @@ export function normalizeEntity(payload: unknown, idHint = ''): LibraryEntity {
     id: slugify(firstString(raw.key, raw.slug, raw.filename, raw.id, idHint) ?? idHint),
     name: firstString(raw.name, raw.displayName, idHint) ?? idHint,
     rarity: Number(raw.rarity ?? raw.rank ?? (Array.isArray(raw.rarityList) ? Math.max(...raw.rarityList.map((value) => Number(value)).filter(Number.isFinite), 0) : 0)) || undefined,
-    type: firstString(raw.weaponText, raw.relicText, raw.weaponType, raw.type, raw.itemType, raw.category),
-    description: firstString(raw.description, raw.desc, weaponPassive) ?? (effectText || undefined),
+    type: cleanWeapon(firstString(raw.weaponText, raw.relicText, raw.weaponType, raw.type, raw.itemType, raw.category)),
+    description: gameText(firstString(raw.description, raw.desc, weaponPassive) ?? effectText),
     icon: image,
     baseAttack: Math.round(Number(raw.baseAtkValue ?? raw.baseAttack ?? raw.baseatk ?? raw.baseATK ?? 0)) || undefined,
     secondaryStat: firstString(raw.mainStatText, raw.mainStatType, raw.substat, raw.secondaryStat),
     secondaryValue: firstString(raw.baseStatText, raw.mainStatValue, raw.substatValue, raw.secondaryValue),
-    effectName: firstString(raw.effectName),
-    twoPieceBonus: firstString(raw.effect2Pc),
-    fourPieceBonus: firstString(raw.effect4Pc),
+    effectName: gameText(firstString(raw.effectName)),
+    twoPieceBonus: gameText(firstString(raw.effect2Pc)),
+    fourPieceBonus: gameText(firstString(raw.effect4Pc)),
     raw,
   };
 }

@@ -1,16 +1,13 @@
-import { asArray, asRecord, firstString, text } from './normalize';
+import { asRecord, firstString, text } from './normalize';
 import type { ConstellationEntry, MaterialRef, TalentEntry } from '../types/genshin';
-
-const candidate = (obj: Record<string, any>, keys: string[]) => keys.map((key) => obj[key]).find((value) => value !== undefined && value !== null);
+import { combinedKitLists } from './characterKit';
+import { gameText } from './gameText';
 
 export function extractTalents(raw: Record<string, unknown>): TalentEntry[] {
   const root = asRecord(raw);
   // Never merge arbitrary provider objects: some catalogue responses expose
   // numbered shells that look like talents but have no game description.
-  const active = asArray(root.skillTalents).length ? asArray(root.skillTalents) : asArray(root.talents);
-  const passive = asArray(root.passiveTalents);
-  const values = [...active, ...passive];
-  const seen = new Set<string>();
+  const values = combinedKitLists(['talents', 'skillTalents', 'passiveTalents'], root);
   return values.map((item, index) => {
     const obj = asRecord(item);
     const name = firstString(obj.name, obj.title);
@@ -23,12 +20,12 @@ export function extractTalents(raw: Record<string, unknown>): TalentEntry[] {
       level: Number(obj.level ?? index + 1) || index + 1,
       raw: obj,
     } satisfies TalentEntry;
-  }).filter((entry) => entry.name && entry.description && !seen.has(entry.name.toLowerCase()) && Boolean(seen.add(entry.name.toLowerCase())));
+  }).filter((entry) => entry.name && entry.description);
 }
 
 export function extractConstellations(raw: Record<string, unknown>): ConstellationEntry[] {
   const root = asRecord(raw);
-  const values = asArray(candidate(root, ['constellations', 'constellationTalents', 'constellation']));
+  const values = combinedKitLists(['constellations', 'constellationTalents', 'constellation'], root);
   return values.map((item, index) => {
     const obj = asRecord(item);
     const name = firstString(obj.name, obj.title);
@@ -40,7 +37,8 @@ export function extractConstellations(raw: Record<string, unknown>): Constellati
       icon: firstString(obj.icon, asRecord(obj.images).filename_icon, asRecord(obj.images).icon),
     } satisfies ConstellationEntry;
   }).filter((entry) => entry.name && entry.description && entry.level && entry.level <= 6)
-    .sort((a, b) => (a.level ?? 0) - (b.level ?? 0));
+    .sort((a, b) => (a.level ?? 0) - (b.level ?? 0))
+    .filter((entry, index, entries) => entries.findIndex((other) => other.level === entry.level) === index);
 }
 
 function materialFromObject(value: unknown, category?: string): MaterialRef | null {
@@ -135,7 +133,7 @@ export function baseStatRows(stats: Record<string, unknown>): Array<Record<strin
 
 export function formatValue(value: unknown): string {
   if (typeof value === 'number') return new Intl.NumberFormat().format(value);
-  if (typeof value === 'string') return value;
+  if (typeof value === 'string') return gameText(value) ?? '—';
   return value == null ? '—' : JSON.stringify(value);
 }
 

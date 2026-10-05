@@ -83,7 +83,7 @@ test('UID search opens equipped builds with correct values and supports deep-lin
   await expect(character).toContainText('Kamisato Ayaka');
   await expect(character).toContainText('Level 90');
   await page.getByRole('button', { name: 'Add showcase to My Roster' }).click();
-  await expect(page.getByRole('status')).toContainText('1 showcase characters added');
+  await expect(page.getByRole('status')).toContainText('1 showcase character added');
   expect(await page.evaluate(() => JSON.parse(localStorage.getItem('teyvat-atlas:owned-characters:v1') ?? '[]'))).toContain('10000002');
   await character.click();
   await expect(page).toHaveURL(/\/profile\/800000001\/characters\/10000002-201$/);
@@ -216,7 +216,7 @@ test('artifact names survive a catalog outage and mixed sets stay distinct', asy
   await expect(page.getByRole('heading', { name: 'Snowswept Memory' })).toBeVisible();
   await expect(page.locator('.equipped-artifact-grid .equipped-item').last().locator('.equipped-item__set')).toHaveText('Viridescent Venerer');
   await expect(page.locator('.artifact-set-summary')).toContainText('Blizzard Strayer · 4 pieces');
-  await expect(page.locator('.artifact-set-summary')).toContainText('Viridescent Venerer · 1 pieces');
+  await expect(page.locator('.artifact-set-summary')).toContainText('Viridescent Venerer · 1 piece');
   await expect(page.locator('.equipped-artifact-grid')).not.toContainText('unavailable');
 });
 
@@ -362,7 +362,8 @@ test('complete mobile profile build has no horizontal overflow', async ({ page }
   }
   await page.setViewportSize({ width: 360, height: 740 });
   // Full-page capture does not itself trigger lazy images below the viewport.
-  for (const icon of await page.locator('.equipped-item__image, .talent-icon, .constellation-icon').all()) await icon.scrollIntoViewIfNeeded();
+  // Scroll stable containers: placeholders legitimately become decoded images.
+  for (const card of await page.locator('.equipped-item, .showcase-talents, .showcase-constellations').all()) await card.scrollIntoViewIfNeeded();
   await page.evaluate(() => window.scrollTo(0, 0));
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
   await page.screenshot({ path: 'test-results/profile-build-mobile.png', fullPage: true });
@@ -474,6 +475,126 @@ test('character skills retain exact provider icon filenames', async ({ page }) =
   await page.getByRole('button', { name: 'Constellations', exact: true }).click();
   await expect(page.locator('.constellation-row')).toContainText('Snowswept Sakura');
   await expect(page.locator('.constellation-marker img')).toHaveAttribute('src', /UI_Talent_S_Ayaka_01/);
+});
+
+test('duplicate sources retain kit icons, clean descriptions and exact sparse constellation numbers', async ({ page }) => {
+  await mockSources(page);
+  await page.route('**/genshin.jmp.blue/characters/kamisato-ayaka?**', (route) => route.fulfill({ json: {
+    name: characterData.name,
+    skillTalents: [{ name: 'Kamisato Art: Kabuki', description: 'Duplicate with no icon.' }],
+    constellations: [{ name: 'Snowswept Sakura', description: 'Duplicate first.' }, { name: 'Dance of Suigetsu', description: 'Duplicate sixth.' }],
+  } }));
+  await page.route('**/api/v5/talents?**', (route) => route.fulfill({ json: {
+    name: characterData.name,
+    combat1: { name: 'Kamisato Art: Kabuki', description: '<color=#fff>Performs strikes.</color>\\nA &amp; B.' },
+    images: { filename_combat1: 'Skill_A_01' },
+  } }));
+  await page.route('**/api/v5/constellations?**', (route) => route.fulfill({ json: {
+    c1: { name: 'Snowswept Sakura', description: 'First effect.' }, c6: { name: 'Dance of Suigetsu', description: 'Sixth effect.' },
+    images: { filename_c1: 'UI_Talent_S_Ayaka_01', filename_c6: 'UI_Talent_S_Ayaka_06' },
+  } }));
+  await page.goto('/characters/10000002');
+  await page.getByRole('button', { name: 'Skills', exact: true }).click();
+  await expect(page.locator('.talent-detail')).toHaveCount(1);
+  await expect(page.locator('.talent-detail img')).toHaveAttribute('src', /Skill_A_01/);
+  await expect(page.locator('.talent-detail p')).toHaveText('Performs strikes.\nA & B.');
+  await page.getByRole('button', { name: 'Constellations', exact: true }).click();
+  await expect(page.locator('.constellation-row')).toHaveCount(2);
+  await expect(page.locator('.constellation-marker').last()).toContainText('C6');
+  await expect(page.locator('.constellation-marker img').last()).toHaveAttribute('src', /UI_Talent_S_Ayaka_06/);
+});
+
+test('missing combat and constellation icons use the exact Enka character catalog', async ({ page }) => {
+  await page.setViewportSize({ width: 320, height: 740 });
+  await mockSources(page);
+  await page.route('**/api/v5/talents?**', (route) => route.fulfill({ json: { combat2: { name: 'Kamisato Art: Hyouka', description: 'Deals Cryo DMG.' } } }));
+  await page.route('**/api/v5/constellations?**', (route) => route.fulfill({ json: { c6: { name: 'Dance of Suigetsu', description: 'Sixth effect.' } } }));
+  await page.goto('/characters/10000002');
+  await page.getByRole('button', { name: 'Skills', exact: true }).click();
+  await expect(page.locator('.talent-detail img')).toHaveAttribute('src', /Skill_S_Ayaka_01/);
+  await page.getByRole('button', { name: 'Constellations', exact: true }).click();
+  await expect(page.locator('.constellation-marker')).toContainText('C6');
+  await expect(page.locator('.constellation-marker img')).toHaveAttribute('src', /UI_Talent_S_Ayaka_06/);
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
+});
+
+test('unavailable optional sources settle without endless loading or repeated permanent errors', async ({ page }) => {
+  await mockSources(page);
+  let secondaryRequests = 0;
+  await page.route('**/genshin.jmp.blue/characters/kamisato-ayaka?**', (route) => {
+    secondaryRequests++;
+    return route.fulfill({ status: 404 });
+  });
+  await page.route('**/api/v5/talents?**', (route) => route.fulfill({ status: 404 }));
+  await page.goto('/characters/10000002');
+  await expect(page.locator('.player-build-summary')).toHaveCount(0);
+  await expect(page.locator('.character-quickfacts')).not.toContainText('Loading');
+  await page.getByRole('button', { name: 'Skills', exact: true }).click();
+  await expect(page.locator('.empty-state')).toContainText('Skill descriptions are unavailable');
+  expect(secondaryRequests).toBe(1);
+  await page.getByRole('button', { name: 'Constellations', exact: true }).click();
+  await expect(page.locator('.constellation-row')).toContainText('Snowswept Sakura');
+});
+
+test('failed URLs are never displayed and remembered artwork skips failed providers on reload', async ({ page }) => {
+  await mockSources(page, { imageFailover: true });
+  const requests: string[] = [];
+  page.on('request', (request) => { if (request.url().includes('UI_Gacha_AvatarImg_Ayaka')) requests.push(request.url()); });
+  await page.addInitScript(() => {
+    (window as any).__displayedHeroImages = [];
+    new MutationObserver(() => {
+      const image = document.querySelector<HTMLImageElement>('img.showcase-build-hero__image');
+      if (image?.src) (window as any).__displayedHeroImages.push(image.src);
+    }).observe(document, { childList: true, attributes: true, subtree: true, attributeFilter: ['src'] });
+  });
+  await page.goto('/profile/800000001/characters/10000002-201');
+  await expect(page.locator('img.showcase-build-hero__image')).toHaveAttribute('src', /gi\.yatta\.moe/);
+  expect(await page.evaluate(() => (window as any).__displayedHeroImages.every((source: string) => source.includes('gi.yatta.moe')))).toBe(true);
+  requests.length = 0;
+  await page.reload();
+  await expect(page.locator('img.showcase-build-hero__image')).toHaveAttribute('src', /gi\.yatta\.moe/);
+  expect(requests.every((source) => source.includes('gi.yatta.moe'))).toBe(true);
+});
+
+test('HTTP retries only transient or malformed responses and timeouts preserve stale data', async ({ page }) => {
+  await mockSources(page);
+  let missingRequests = 0;
+  let malformedRequests = 0;
+  await page.route('https://data.test/missing', (route) => { missingRequests++; return route.fulfill({ status: 404 }); });
+  await page.route('https://data.test/malformed', (route) => {
+    malformedRequests++;
+    return malformedRequests === 1 ? route.fulfill({ body: '{"incomplete":' }) : route.fulfill({ json: { recovered: true } });
+  });
+  await page.goto('/profile');
+  const result = await page.evaluate(async () => {
+    const modulePath = '/src/api/http.ts';
+    const { getJson } = await import(modulePath);
+    const cachePath = '/src/api/cache.ts';
+    const { writeCache } = await import(cachePath);
+    let missingError = '';
+    try { await getJson('https://data.test/missing'); } catch (error) { missingError = String(error); }
+    const recovered = await getJson('https://data.test/malformed');
+    const originalFetch = window.fetch;
+    window.fetch = (input, init) => String(input).startsWith('https://data.test/hanging')
+      ? new Promise((_resolve, reject) => {
+        init?.signal?.addEventListener('abort', () => reject(new DOMException('Aborted', 'AbortError')), { once: true });
+      }) : originalFetch(input, init);
+    try {
+      writeCache('deadline-test', { stale: true }, -1);
+      const stale = await getJson('https://data.test/hanging', undefined, { cacheKey: 'deadline-test', timeoutMs: 50 });
+      let timeoutError = '';
+      try { await getJson('https://data.test/hanging-empty', undefined, { timeoutMs: 50 }); } catch (error) { timeoutError = String(error); }
+      const controller = new AbortController();
+      const aborted = getJson('https://data.test/hanging-aborted', controller.signal, { cacheKey: 'deadline-test', timeoutMs: 1000 }).catch((error: Error) => error.name);
+      controller.abort();
+      return { missingError, recovered, stale, timeoutError, aborted: await aborted };
+    } finally { window.fetch = originalFetch; }
+  });
+  expect(missingRequests).toBe(1);
+  expect(malformedRequests).toBe(2);
+  expect(result).toMatchObject({ recovered: { recovered: true }, stale: { stale: true }, aborted: 'AbortError' });
+  expect(result.missingError).toContain('404');
+  expect(result.timeoutError).toContain('took too long');
 });
 
 test.describe('touch phone landscape', () => {

@@ -81,11 +81,11 @@ function ComparisonColumn({ entry, side }: { entry: ComparisonEntry; side: strin
     </div>
     <div className="compare-section">
       <span>Main stats</span>
-      <strong>{guide ? [guide.mainStats.sands, guide.mainStats.goblet, guide.mainStats.circlet].filter(Boolean).join(' / ') || 'Not specified' : 'Loading…'}</strong>
+      <strong>{guide ? [guide.mainStats.sands, guide.mainStats.goblet, guide.mainStats.circlet].filter(Boolean).join(' / ') || 'Not specified' : entry.loading ? 'Loading…' : 'Unavailable from the current guide'}</strong>
     </div>
     <div className="compare-section">
       <span>Top weapon options</span>
-      <strong>{guide?.weapons.slice(0, 3).map((weapon) => weapon.name).join(' · ') || 'Loading…'}</strong>
+      <strong>{guide?.weapons.slice(0, 3).map((weapon) => weapon.name).join(' · ') || (entry.loading ? 'Loading…' : 'Unavailable from the current guide')}</strong>
     </div>
     {sourceLinks.length > 0 && <div className="compare-sources">
       {sourceLinks.map((link) => <a key={link.url} href={link.url} target="_blank" rel="noreferrer">{link.label} <ExternalLink size={12} /></a>)}

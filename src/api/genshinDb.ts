@@ -1,5 +1,5 @@
 import { getJson } from './http';
-import { normalizeCharacter, normalizeEntity, unwrapResult, asArray } from '../utils/normalize';
+import { normalizeCharacter, normalizeEntity, unwrapResult, asArray, asRecord } from '../utils/normalize';
 import type { GenshinCharacter, LibraryEntity } from '../types/genshin';
 import { fetchGenshinBuildsAssetMap, findGenshinBuildsAsset } from './genshinDev';
 
@@ -47,11 +47,19 @@ function requestedTravelerElement(query: string): string | undefined {
   return getTravelerElement(query);
 }
 
+function hasCharacterArtwork(character: GenshinCharacter): boolean {
+  return Object.entries(character.images).some(([key, value]) => key === 'files' ? Object.values(value ?? {}).some(Boolean) : Boolean(value));
+}
+
+function hasEntityArtwork(entity: LibraryEntity): boolean {
+  return Boolean(entity.icon || Object.entries(asRecord(entity.raw.images)).some(([key, value]) => /^(?:filename_|mihoyo_|icon|flower)/i.test(key) && typeof value === 'string' && value.trim()));
+}
+
 async function enrichCharacterAsset(character: GenshinCharacter, signal?: AbortSignal): Promise<GenshinCharacter> {
   // GenshinDB already gives detailed records their official card/portrait.
   // Do not delay opening the character page behind a scraped asset index when
   // usable artwork is already present.
-  if (character.images.image || character.images.card || character.images.portrait || character.images.icon) return character;
+  if (hasCharacterArtwork(character)) return character;
   const assets = await fetchGenshinBuildsAssetMap('characters', signal).catch(() => ({}) as Record<string, string>);
   const image = findGenshinBuildsAsset(assets, character.name);
   return image ? { ...character, images: { ...character.images, image } } : character;
@@ -68,9 +76,10 @@ export async function fetchCharacterNames(signal?: AbortSignal): Promise<Genshin
     if (traveler) withoutTravelerChoices.unshift({ ...traveler, id: 'traveler', name: 'Traveler' });
     const roster = withoutTravelerChoices;
     const sparse = roster.filter((item) => !item.element || !item.weapon || !item.rarity).length > roster.length * 0.5;
-    const buildAssets = await fetchGenshinBuildsAssetMap('characters', signal).catch(() => ({}) as Record<string, string>);
+    const buildAssets = roster.some((character) => !hasCharacterArtwork(character))
+      ? await fetchGenshinBuildsAssetMap('characters', signal).catch(() => ({}) as Record<string, string>) : {};
     const enrichedRoster = roster.map((character) => {
-      const image = findGenshinBuildsAsset(buildAssets, character.name);
+      const image = hasCharacterArtwork(character) ? undefined : findGenshinBuildsAsset(buildAssets, character.name);
       return image ? { ...character, images: { ...character.images, image } } : character;
     });
     if (!sparse) return enrichedRoster;
@@ -164,15 +173,17 @@ export async function fetchCharacter(
 export async function fetchFolderEntities(folder: string, signal?: AbortSignal): Promise<LibraryEntity[]> {
   const payload = await getJson<unknown>(queryUrl(folder, 'names', { matchCategories: 'true', verboseCategories: 'true' }), signal, { cacheKey: `folder-index:${folder}:v6`, ttlMs: 6 * 60 * 60 * 1000 });
   const entities = asArray(unwrapResult(payload)).map((item) => normalizeEntity(item)).filter((item) => item.name);
-  const buildAssets = await fetchGenshinBuildsAssetMap(folder as 'weapons' | 'artifacts', signal).catch(() => ({}) as Record<string, string>);
+  const buildAssets = (folder === 'weapons' || folder === 'artifacts') && entities.some((entity) => !hasEntityArtwork(entity))
+    ? await fetchGenshinBuildsAssetMap(folder, signal).catch(() => ({}) as Record<string, string>) : {};
   return entities.map((entity) => {
-    const image = findGenshinBuildsAsset(buildAssets, entity.name);
+    const image = hasEntityArtwork(entity) ? undefined : findGenshinBuildsAsset(buildAssets, entity.name);
     return image ? { ...entity, icon: image } : entity;
   });
 }
 export async function fetchEntity(folder: string, query: string, signal?: AbortSignal): Promise<LibraryEntity> {
   const payload = await getJson<unknown>(queryUrl(folder, query, { matchNames: 'true', matchAltNames: 'true', matchAliases: 'true' }), signal, { cacheKey: `${folder}:v7:${query.toLowerCase()}`, ttlMs: 6 * 60 * 60 * 1000 });
   const entity = normalizeEntity(payload, query);
+  if (hasEntityArtwork(entity)) return entity;
   const assetFolder = folder === 'weapons' || folder === 'artifacts' ? folder : null;
   const assets = assetFolder ? await fetchGenshinBuildsAssetMap(assetFolder, signal).catch(() => ({}) as Record<string, string>) : {};
   const image = findGenshinBuildsAsset(assets, entity.name);

@@ -195,8 +195,8 @@ export function characterImageSources(character: Pick<GenshinCharacter, 'id' | '
   return unique([
     ...(isTraveler ? [TRAVELER_BUILD_IMAGE, TRAVELER_COMBINED_IMAGE] : []),
     ...filenames.flatMap((filename) => cdnCandidates(filename, 'characters')),
-    genshinBuildsImage('characters', character.name || character.id),
     ...raw.flatMap(directImage),
+    genshinBuildsImage('characters', character.name || character.id),
     ...genshinTypes.map((imageType) => entityImage('characters', character.name || character.id, imageType)),
     ...filenames.flatMap((filename) => cdnCandidates(filename, 'characters')),
     ...characterIconCdnSources(character.name || character.id),
@@ -233,8 +233,8 @@ export function entityImageSources(type: string, entity: Pick<LibraryEntity, 'na
   return unique([
     ...filenameCandidates.flatMap((filename) => cdnCandidates(filename, type as 'characters' | 'weapons' | 'artifacts' | 'materials')),
     ...directImage(entity.icon),
-    ...(type === 'weapons' || type === 'artifacts' ? [genshinBuildsImage(type, entity.name)] : []),
     ...rawImages,
+    ...(type === 'weapons' || type === 'artifacts' ? [genshinBuildsImage(type, entity.name)] : []),
     ...entityImages,
     ...filenameCandidates.flatMap((filename) => cdnCandidates(filename, type as 'characters' | 'weapons' | 'artifacts' | 'materials')),
     ...entityIconCdnSources(type, entity.name),

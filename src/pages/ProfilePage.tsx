@@ -46,7 +46,8 @@ export function ProfilePage() {
 
   function importRoster() {
     writeOwnedCharacterIds([...new Set([...readOwnedCharacterIds(), ...matched])]);
-    setImportMessage(`${new Set(matched).size} showcase characters added to My Roster.`);
+    const count = new Set(matched).size;
+    setImportMessage(`${count} showcase ${count === 1 ? 'character' : 'characters'} added to My Roster.`);
   }
 
   return <div>

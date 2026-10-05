@@ -8,6 +8,7 @@ import { MaterialIcon } from '../components/MaterialIcon';
 import { ArtifactPieces } from '../components/ArtifactPieces';
 import { usePaimonContext } from '../components/PaimonCompanion';
 import { extractMaterials, formatValue } from '../utils/genshin';
+import { gameText } from '../utils/gameText';
 import type { LibraryEntity } from '../types/genshin';
 
 function weaponRefinementDescriptions(entity: LibraryEntity): Record<string, string> {
@@ -25,7 +26,7 @@ function weaponRefinementDescriptions(entity: LibraryEntity): Record<string, str
     const record = value as Record<string, unknown>;
 
     if (typeof record.description === 'string' && record.description.trim()) {
-      refinements[level] = record.description.trim();
+      refinements[level] = gameText(record.description) ?? '';
     }
   }
 
@@ -209,11 +210,13 @@ export function LibraryPage({
 
     setLoading(true);
     setError(null);
+    setItems([]);
+    setSelected(null);
 
     fetchFolderEntities(folder, controller.signal)
-      .then(setItems)
+      .then((entities) => { if (!controller.signal.aborted) setItems(entities); })
       .catch((reason) => {
-        if (reason?.name !== 'AbortError') {
+        if (!controller.signal.aborted && reason?.name !== 'AbortError') {
           setError(
             reason instanceof Error
               ? reason.message
@@ -221,7 +224,7 @@ export function LibraryPage({
           );
         }
       })
-      .finally(() => setLoading(false));
+      .finally(() => { if (!controller.signal.aborted) setLoading(false); });
 
     return () => controller.abort();
   }, [folder]);
@@ -529,21 +532,21 @@ export function LibraryPage({
                 <div>
                   <span>Base ATK (Lv. 1)</span>
                   <strong>
-                    {selected.baseAttack ?? 'N/A'}
+                    {selected.baseAttack ?? '—'}
                   </strong>
                 </div>
 
                 <div>
                   <span>Secondary stat</span>
                   <strong>
-                    {selected.secondaryStat ?? 'N/A'}
+                    {selected.secondaryStat ?? '—'}
                   </strong>
                 </div>
 
                 <div>
                   <span>Value</span>
                   <strong>
-                    {selected.secondaryValue ?? 'N/A'}
+                    {selected.secondaryValue ?? '—'}
                   </strong>
                 </div>
               </div>

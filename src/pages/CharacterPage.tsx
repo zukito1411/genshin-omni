@@ -14,6 +14,8 @@ import { usePaimonContext } from '../components/PaimonCompanion';
 import { SectionTitle } from '../components/SectionTitle';
 import { useCharacters } from '../hooks/useCharacters';
 import { slugify } from '../utils/normalize';
+import { combinedKitLists } from '../utils/characterKit';
+import { gameText } from '../utils/gameText';
 import { baseStatRows, extractConstellations, extractMaterials, extractTalents, formatValue } from '../utils/genshin';
 import type { AggregatedCharacter, CharacterGuide, LibraryEntity, MaterialRef } from '../types/genshin';
 
@@ -44,30 +46,6 @@ function populatedCollection(...values: unknown[]): unknown {
     : Boolean(value && typeof value === 'object' && Object.keys(value).length > 0));
 }
 
-function combinedLists(keys: string[], ...values: unknown[]): unknown[] {
-  // Different public providers can expose complementary portions of a kit.
-  // Retain every actual list, then let the extractors deduplicate by name.
-  return values.flatMap((value) => {
-    if (Array.isArray(value)) return value;
-    if (!value || typeof value !== 'object') return [];
-    const record = value as Record<string, unknown>;
-    const nested = ['result', ...keys]
-      .flatMap((key) => Array.isArray(record[key]) ? record[key] : []);
-    if (nested.length) return nested;
-
-    // Some provider versions key the six constellation records (or talents)
-    // by ID rather than returning an array. Accept that shape only when each
-    // value is a real, described entry—not arbitrary response metadata.
-    const entries = Object.entries(record).filter(([, entry]) => {
-      if (!entry || typeof entry !== 'object' || Array.isArray(entry)) return false;
-      const item = entry as Record<string, unknown>;
-      return typeof item.name === 'string' && typeof (item.description ?? item.desc ?? item.effect) === 'string';
-    });
-    const images = record.images && typeof record.images === 'object' ? record.images as Record<string, unknown> : {};
-    return entries.map(([key, entry]) => ({ ...entry as Record<string, unknown>, icon: images[`filename_${key}`] ?? images[key] ?? (entry as Record<string, unknown>).icon }));
-  });
-}
-
 function characterDetailRaw(character: AggregatedCharacter): Record<string, unknown> {
   const raw = character.raw;
   const dev = character.secondary.dev && typeof character.secondary.dev === 'object'
@@ -84,8 +62,8 @@ function characterDetailRaw(character: AggregatedCharacter): Record<string, unkn
     ...rawDetails,
     ...devDetails,
     ...(costs ? { costs } : { ascension_materials: ascensionMaterials }),
-    talents: combinedLists(['talents', 'skillTalents', 'passiveTalents'], dev.skillTalents, dev.talents, character.secondary.talents, character.raw.talents),
-    constellations: combinedLists(['constellations', 'constellationTalents'], dev.constellations, dev.constellationTalents, character.secondary.constellations, character.raw.constellations),
+    talents: combinedKitLists(['talents', 'skillTalents', 'passiveTalents'], character.secondary.talents, raw, dev),
+    constellations: combinedKitLists(['constellations', 'constellationTalents'], character.secondary.constellations, raw, dev),
   };
 }
 
@@ -107,7 +85,7 @@ function recommendationImageSources(folder: 'weapons' | 'artifacts', name: strin
 function RecommendationCard({ title, badge, note, imageSources, onClick, folder }: { title: string; badge: string; note: string; imageSources?: string[]; onClick?: () => void; folder: 'weapons' | 'artifacts' }) {
   return (
     <article className={`player-recommendation ${onClick ? 'player-recommendation--interactive' : ''}`} onClick={onClick} role={onClick ? 'button' : undefined} tabIndex={onClick ? 0 : undefined} onKeyDown={(event) => { if (onClick && (event.key === 'Enter' || event.key === ' ')) onClick(); }}>
-      {imageSources?.length ? <AsyncImage src={imageSources} alt="" className="recommendation-image" assetKey={assetKey(folder, catalogName(title))} /> : <div className="recommendation-image recommendation-image--empty">N/A</div>}
+      {imageSources?.length ? <AsyncImage src={imageSources} alt="" className="recommendation-image" assetKey={assetKey(folder, catalogName(title))} /> : <div className="recommendation-image recommendation-image--empty">—</div>}
       <div className="player-recommendation__body">
         <div className="recommend-top"><strong>{title}</strong><span>{badge}</span></div>
         <p>{note}</p>
@@ -176,7 +154,7 @@ function weaponRefinementDescriptions(entity: LibraryEntity): Record<string, str
     const record = value as Record<string, unknown>;
 
     if (typeof record.description === 'string' && record.description.trim()) {
-      refinements[level] = record.description.trim();
+      refinements[level] = gameText(record.description) ?? '';
     }
   }
 
@@ -222,6 +200,7 @@ export function CharacterPage() {
   useEffect(() => {
     const controller = new AbortController();
     let active = true;
+    let hasCharacter = false;
     setLoading(true);
     setGuideLoading(true);
     setGameDataLoading(true);
@@ -240,44 +219,38 @@ export function CharacterPage() {
     // Render primary structured data first. Detailed sources then hydrate the
     // same page in place, so a slow scraper never requires a page reload.
     fetchCharacter(activeCharacterQuery)
-      .then((characterValue) => { if (active) setCharacter({ ...characterValue, stats: {}, secondary: {}, sources: [] }); })
+      .then((characterValue) => {
+        if (!active) return;
+        hasCharacter = true;
+        setError(null);
+        // A late primary response must not replace an already-enriched kit.
+        setCharacter((current) => current ?? { ...characterValue, stats: {}, secondary: {}, sources: [] });
+      })
       .catch((err) => {
-        if (active && err?.name !== 'AbortError') setError(err instanceof Error ? err.message : 'Unable to load this character.');
+        if (active && !hasCharacter && err?.name !== 'AbortError') setError(err instanceof Error ? err.message : 'Unable to load this character.');
       })
       .finally(() => {
         if (active) setLoading(false);
       });
 
-    const pause = (milliseconds: number) => new Promise<void>((resolve) => window.setTimeout(resolve, milliseconds));
     const hydrateGameData = async () => {
-      let attempt = 0;
-      while (active) {
-        try {
-          const enriched = await fetchAggregatedCharacter(activeCharacterQuery);
-          if (!active) return;
-          setCharacter(enriched);
-          const detail = enriched.secondary.dev;
-          const complete = Object.keys(enriched.stats).length > 0 && Boolean(detail && typeof detail === 'object' && Object.keys(detail).length > 0);
-          if (complete) { setGameDataLoading(false); return; }
-        } catch { /* Keep primary data visible and retry enrichment below. */ }
-        attempt += 1;
-        await pause(Math.min(8_000, 900 * attempt));
-      }
+      try {
+        const enriched = await fetchAggregatedCharacter(activeCharacterQuery);
+        if (!active) return;
+        hasCharacter = true;
+        setError(null);
+        setCharacter(enriched);
+      } catch { /* Keep primary data visible; HTTP already retries transient failures. */ }
+      finally { if (active) setGameDataLoading(false); }
     };
     const hydrateGuide = async () => {
-      let attempt = 0;
-      while (active) {
-        try {
-          const guideValue = await fetchPlayerGuide(slugify(activeCharacterQuery), undefined, (partialGuide) => {
-            if (active) setLiveGuide(partialGuide);
-          });
-          if (active) { setLiveGuide(guideValue); setGuideLoading(false); }
-          return;
-        } catch {
-          attempt += 1;
-          await pause(Math.min(10_000, 1_000 * attempt));
-        }
-      }
+      try {
+        const guideValue = await fetchPlayerGuide(slugify(activeCharacterQuery), controller.signal, (partialGuide) => {
+          if (active) setLiveGuide(partialGuide);
+        });
+        if (active) setLiveGuide(guideValue);
+      } catch { /* A missing optional guide is a settled state, not endless loading. */ }
+      finally { if (active) setGuideLoading(false); }
     };
     void hydrateGameData();
     void hydrateGuide();
@@ -291,29 +264,23 @@ export function CharacterPage() {
     [allCharacters],
   );
 
+  const recommendationQueries = JSON.stringify([liveGuide?.weapons.map((item) => item.name) ?? [], liveGuide?.artifacts.map((item) => item.set) ?? []]);
+
   useEffect(() => {
-    if (!liveGuide) return;
     const controller = new AbortController();
-    const load = async () => {
-      const [weaponEntries, artifactEntries, weaponAssetMap, artifactAssetMap] = await Promise.all([
-        Promise.all(liveGuide.weapons.map(async (item) => {
-          try { return [item.name, await fetchEntity('weapons', catalogName(item.name), controller.signal)] as const; } catch { return null; }
-        })),
-        Promise.all(liveGuide.artifacts.map(async (item) => {
-          try { return [item.set, await fetchEntity('artifacts', catalogName(item.set), controller.signal)] as const; } catch { return null; }
-        })),
-        fetchGenshinBuildsAssetMap('weapons', controller.signal).catch(() => ({})),
-        fetchGenshinBuildsAssetMap('artifacts', controller.signal).catch(() => ({})),
-      ]);
-      if (controller.signal.aborted) return;
-      setWeaponEntities(Object.fromEntries(weaponEntries.filter((entry): entry is readonly [string, LibraryEntity] => Boolean(entry))));
-      setArtifactEntities(Object.fromEntries(artifactEntries.filter((entry): entry is readonly [string, LibraryEntity] => Boolean(entry))));
-      setWeaponAssets(weaponAssetMap);
-      setArtifactAssets(artifactAssetMap);
-    };
-    load();
+    const [weapons, artifacts] = JSON.parse(recommendationQueries) as [string[], string[]];
+    for (const [folder, names, commit] of [['weapons', weapons, setWeaponEntities], ['artifacts', artifacts, setArtifactEntities]] as const) {
+      for (const name of new Set(names)) {
+        void fetchEntity(folder, catalogName(name), controller.signal).then((entity) => {
+          if (!controller.signal.aborted) commit((current) => ({ ...current, [name]: entity }));
+        }).catch(() => undefined);
+      }
+    }
+    // Optional scraped artwork must not hold up verified equipment records.
+    if (weapons.length) void fetchGenshinBuildsAssetMap('weapons').then((assets) => { if (!controller.signal.aborted) setWeaponAssets(assets); }).catch(() => undefined);
+    if (artifacts.length) void fetchGenshinBuildsAssetMap('artifacts').then((assets) => { if (!controller.signal.aborted) setArtifactAssets(assets); }).catch(() => undefined);
     return () => controller.abort();
-  }, [liveGuide]);
+  }, [recommendationQueries]);
 
   useEffect(() => {
     if (!character) return;
@@ -430,17 +397,17 @@ export function CharacterPage() {
     <Link to="/characters" className="back-link">↩ Character library</Link>
 
     <section className={`character-hero ${String(character.element ?? '').toLowerCase()}`}>
-      <div className="character-hero__art"><AsyncImage src={imageSources} alt={displayName} className="character-portrait" assetKey={assetKey('characters', activeCharacterQuery)} /></div>
+      <div className="character-hero__art"><AsyncImage src={imageSources} alt={displayName} className="character-portrait" loading="eager" assetKey={assetKey('characters', activeCharacterQuery)} /></div>
       <div className="character-hero__copy">
         <div className="hero-meta">
-          <span className={`element-chip large element-${(character.element ?? 'unknown').toLowerCase()}`}>{elementImageSources(character.element).length > 0 && <img src={elementImageSources(character.element)[0]} alt="" />}{character.element ?? 'Unknown'}</span>
+          <span className={`element-chip large element-${(character.element ?? 'unknown').toLowerCase()}`}>{elementImageSources(character.element).length > 0 && <AsyncImage src={elementImageSources(character.element)} alt="" fallback={null} loading="eager" />}{character.element ?? 'Unknown'}</span>
           <span>{character.weapon ?? 'Weapon'}</span>
           <span>{character.region ?? 'Teyvat'}</span>
           {character.rarity && <span className="gold-stars">{'★'.repeat(character.rarity)}</span>}
         </div>
         <div className="eyebrow">{character.title ?? 'Playable character'}</div>
         <h1>{displayName}</h1>
-        <p>{character.description ?? 'Learn the character, recommended build, teams and materials in one place.'}</p>
+        <p style={{ whiteSpace: 'pre-line' }}>{character.description ?? 'Learn the character, recommended build, teams and materials in one place.'}</p>
         {isTraveler && <label className="traveler-element-control">
           <span>Traveler element</span>
           <select value={travelerElement} onChange={(event) => selectTravelerElement(event.target.value as TravelerElement)} aria-label="Traveler element">
@@ -451,9 +418,9 @@ export function CharacterPage() {
     </section>
 
     <div className="character-quickfacts">
-      <div><span>Role</span><strong>{guide?.role.join(' • ') || (guideLoading ? 'Loading build data!' : `${character.weapon ?? 'Character'} • ${character.element ?? 'Unknown'}`)}</strong></div>
-      <div><span>Playstyle</span><strong>{guide?.summary || (guideLoading ? 'Loading current recommendations!' : 'Use the live character data below to understand this character.')}</strong></div>
-      <div><span>Talent focus</span><strong>{guide?.talentPriority.join(' → ') || (guideLoading ? 'Loading!' : 'Open Skills')}</strong></div>
+      <div><span>Role</span><strong>{guide?.role.join(' • ') || (guideLoading ? 'Loading build data…' : `${character.weapon ?? 'Character'} • ${character.element ?? 'Unknown'}`)}</strong></div>
+      <div><span>Playstyle</span><strong>{guide?.summary || (guideLoading ? 'Loading recommendations…' : 'Use the live character data below to understand this character.')}</strong></div>
+      <div><span>Talent focus</span><strong>{guide?.talentPriority.join(' → ') || (guideLoading ? 'Loading…' : 'Open Skills')}</strong></div>
     </div>
 
     <div className="tabs player-tabs">
@@ -465,17 +432,17 @@ export function CharacterPage() {
 
     {tab === 'build' && <div className="player-page-grid">
       <section className="panel player-panel">
-        <SectionTitle eyebrow="RECOMMENDED BUILD" title="Build this character" description={guide?.summary ?? (guideLoading ? 'Loading maintained player build sources!' : 'No public build source is currently available for this character; the game data below remains available.')} />
+        <SectionTitle eyebrow="RECOMMENDED BUILD" title="Build this character" description={guide?.summary ?? (guideLoading ? 'Loading build sources…' : 'No public build source is currently available for this character; the game data below remains available.')} />
         {guide ? <>
           <div className="build-stat-grid player-build-summary">
-            <div><span>Role</span><strong>{guide.role.length ? guide.role.join(' • ') : (guideLoading ? 'Analyzing build role!' : 'Role not specified by the guide')}</strong></div>
-            <div><span>Talent priority</span><strong>{guide.talentPriority.length ? guide.talentPriority.join(' → ') : (guideLoading ? 'Analyzing talent priority!' : 'See Skills')}</strong></div>
-            <div><span>Substat priority</span><strong>{guide.statPriority.length ? guide.statPriority.join(' → ') : (guideLoading ? 'Analyzing substats!' : 'See main stats below')}</strong></div>
+            <div><span>Role</span><strong>{guide.role.length ? guide.role.join(' • ') : (guideLoading ? 'Loading build role…' : 'Role not specified by the guide')}</strong></div>
+            <div><span>Talent priority</span><strong>{guide.talentPriority.length ? guide.talentPriority.join(' → ') : (guideLoading ? 'Loading talent priority…' : 'See Skills')}</strong></div>
+            <div><span>Substat priority</span><strong>{guide.statPriority.length ? guide.statPriority.join(' → ') : (guideLoading ? 'Loading substats…' : 'See main stats below')}</strong></div>
           </div>
 
           <div className="player-section-heading"><div><div className="eyebrow">ARTIFACTS</div><h3>Recommended artifact sets</h3></div></div>
           <div className="recommend-grid player-recommend-grid">
-            {guide.artifacts.length ? guide.artifacts.map((artifact) => <RecommendationCard key={`${artifact.set}-${artifact.pieces}`} folder="artifacts" title={artifact.set} badge={artifact.pieces} note={artifact.note} imageSources={recommendationImageSources('artifacts', artifact.set, artifactEntities[artifact.set], findGenshinBuildsAsset(artifactAssets, catalogName(artifact.set)))} onClick={artifactEntities[artifact.set] ? () => openRecommendation('artifacts', artifactEntities[artifact.set]) : undefined} />) : <div className="player-empty"><strong>{guideLoading ? 'Loading verified artifact recommendations!' : 'Artifact recommendations are being refreshed.'}</strong><p>Verified cards will appear here automatically as the build sources respond.</p></div>}
+            {guide.artifacts.length ? guide.artifacts.map((artifact) => <RecommendationCard key={`${artifact.set}-${artifact.pieces}`} folder="artifacts" title={artifact.set} badge={artifact.pieces} note={artifact.note} imageSources={recommendationImageSources('artifacts', artifact.set, artifactEntities[artifact.set], findGenshinBuildsAsset(artifactAssets, catalogName(artifact.set)))} onClick={artifactEntities[artifact.set] ? () => openRecommendation('artifacts', artifactEntities[artifact.set]) : undefined} />) : <div className="player-empty"><strong>{guideLoading ? 'Loading artifact recommendations…' : 'Artifact recommendations are unavailable from the current sources.'}</strong><p>{guideLoading ? 'Recommendations will appear as sources respond.' : 'Try reopening this character later.'}</p></div>}
           </div>
 
           <div className="main-stat-card">
@@ -486,20 +453,20 @@ export function CharacterPage() {
 
           <div className="player-section-heading"><div><div className="eyebrow">WEAPONS</div><h3>Recommended weapons</h3></div></div>
           <div className="recommend-grid player-recommend-grid">
-            {guide.weapons.length ? guide.weapons.map((weapon) => <RecommendationCard key={weapon.name} folder="weapons" title={weapon.name} badge={weapon.tier} note={weapon.note} imageSources={recommendationImageSources('weapons', weapon.name, weaponEntities[weapon.name], findGenshinBuildsAsset(weaponAssets, catalogName(weapon.name)))} onClick={weaponEntities[weapon.name] ? () => openRecommendation('weapons', weaponEntities[weapon.name]) : undefined} />) : <div className="player-empty"><strong>{guideLoading ? 'Loading verified weapon recommendations!' : 'Weapon recommendations are being refreshed.'}</strong><p>Verified cards will appear here automatically as the build sources respond.</p></div>}
+            {guide.weapons.length ? guide.weapons.map((weapon) => <RecommendationCard key={weapon.name} folder="weapons" title={weapon.name} badge={weapon.tier} note={weapon.note} imageSources={recommendationImageSources('weapons', weapon.name, weaponEntities[weapon.name], findGenshinBuildsAsset(weaponAssets, catalogName(weapon.name)))} onClick={weaponEntities[weapon.name] ? () => openRecommendation('weapons', weaponEntities[weapon.name]) : undefined} />) : <div className="player-empty"><strong>{guideLoading ? 'Loading weapon recommendations…' : 'Weapon recommendations are unavailable from the current sources.'}</strong><p>{guideLoading ? 'Recommendations will appear as sources respond.' : 'Try reopening this character later.'}</p></div>}
           </div>
-        </> : <div className="player-empty"><Sparkles size={20} /><div><strong>{guideLoading ? 'Loading the latest player build information!' : 'No public build source is currently available.'}</strong><p>{guideLoading ? 'Teyvat Atlas is checking multiple public build sources for this character.' : 'The live game data, skills, constellations and materials are still available on this page.'}</p></div></div>}
+        </> : <div className="player-empty"><Sparkles size={20} /><div><strong>{guideLoading ? 'Loading build information…' : 'No public build source is currently available.'}</strong><p>{guideLoading ? 'Teyvat Atlas is checking multiple public build sources for this character.' : 'The live game data, skills, constellations and materials are still available on this page.'}</p></div></div>}
       </section>
 
       <section className="panel player-panel">
         <SectionTitle eyebrow="CHARACTER STATS" title="Progression" description="Base stats from the live game-data source." />
         <div className="stat-table-wrap"><table className="stat-table"><thead><tr><th>Level</th><th>HP</th><th>ATK</th><th>DEF</th><th>{ascensionBonusLabel}</th></tr></thead><tbody>{statRows.map((row) => <tr key={`${String(row.level)}-${String(row.hp)}`}><td>{String(row.level)}</td><td>{formatValue(row.hp)}</td><td>{formatValue(row.attack)}</td><td>{formatValue(row.defense)}</td><td>{formatAscensionBonus(row.specialized, ascensionBonusLabel)}</td></tr>)}</tbody></table></div>
-        {!statRows.length && <div className="empty-state">{gameDataLoading ? 'Loading verified progression data!' : 'Progression data is being refreshed from the game-data source.'}</div>}
+        {!statRows.length && <div className="empty-state">{gameDataLoading ? 'Loading progression data…' : 'Progression data is unavailable from the current source.'}</div>}
       </section>
 
       <section className="panel player-panel player-panel--wide">
         <SectionTitle eyebrow="TEAM COMPOSITIONS" title="Recommended teams" description="Team recommendations gathered from the current public build sources." />
-        {guide?.teams?.length ? <div className="team-guide-grid">{guide.teams.map((team) => <article className="team-guide-card" key={team.name}><div className="team-guide-card__title"><Swords size={17} /><h3>{team.name}</h3></div><div className="member-row">{team.members.length ? team.members.map((member) => { const memberCharacter = teamCharacterByName.get(slugify(member)); return <span className="member-pill member-pill--character" key={member}>{memberCharacter && <AsyncImage src={characterImageSources(memberCharacter, 'icon')} alt="" className="member-pill__image" fallback="" assetKey={assetKey('characters', memberCharacter.id || memberCharacter.name)} />}<span>{member}</span></span>; }) : <span className="member-pill">{team.name}</span>}</div><p>{team.note}</p>{team.source && <a href={team.source} target="_blank" rel="noreferrer" className="inline-source">Source <ExternalLink size={12} /></a>}</article>)}</div> : <div className="player-empty"><Swords size={20} /><div><strong>{guideLoading ? 'Loading team recommendations!' : 'No team recommendations were returned by the checked sources.'}</strong><p>{guideLoading ? 'Teyvat Atlas is checking multiple maintained sources.' : 'No team is being fabricated when the sources do not provide one.'}</p></div></div>}
+        {guide?.teams?.length ? <div className="team-guide-grid">{guide.teams.map((team) => <article className="team-guide-card" key={team.name}><div className="team-guide-card__title"><Swords size={17} /><h3>{team.name}</h3></div><div className="member-row">{team.members.length ? team.members.map((member) => { const memberCharacter = teamCharacterByName.get(slugify(member)); return <span className="member-pill member-pill--character" key={member}>{memberCharacter && <AsyncImage src={characterImageSources(memberCharacter, 'icon')} alt="" className="member-pill__image" fallback="" assetKey={assetKey('characters', memberCharacter.id || memberCharacter.name)} />}<span>{member}</span></span>; }) : <span className="member-pill">{team.name}</span>}</div><p>{team.note}</p>{team.source && <a href={team.source} target="_blank" rel="noreferrer" className="inline-source">Source <ExternalLink size={12} /></a>}</article>)}</div> : <div className="player-empty"><Swords size={20} /><div><strong>{guideLoading ? 'Loading team recommendations…' : 'No team recommendations were returned by the checked sources.'}</strong><p>{guideLoading ? 'Teyvat Atlas is checking multiple maintained sources.' : 'Try reopening this character later.'}</p></div></div>}
       </section>
 
       <section className="panel player-panel player-panel--wide">
@@ -513,9 +480,9 @@ export function CharacterPage() {
       </section>
     </div>}
 
-    {tab === 'skills' && <section className="panel player-panel"><SectionTitle eyebrow="TALENTS" title="Skills & abilities" description="Understand what each part of the kit does before investing resources." />{talents.length ? <div className="talent-detail-grid">{talents.map((talent, index) => <article className="talent-detail" key={`${talent.name}-${index}`}><AsyncImage className="talent-index ability-icon" src={abilityImageSources(talent.icon)} alt="" assetKey={`talents:${character.id}:${talent.name}`} fallback={<AssetPlaceholder kind="talent" />} /><div><div className="eyebrow">{talent.type ?? 'Talent'}</div><h3>{talent.name}</h3><p>{talent.description ?? 'Loading description!'}</p></div></article>)}</div> : <div className="empty-state">{gameDataLoading ? 'Loading verified skill descriptions!' : 'Skill descriptions are being refreshed from the game-data source.'}</div>}</section>}
+    {tab === 'skills' && <section className="panel player-panel"><SectionTitle eyebrow="TALENTS" title="Skills & abilities" description="Understand what each part of the kit does before investing resources." />{talents.length ? <div className="talent-detail-grid">{talents.map((talent, index) => <article className="talent-detail" key={`${talent.name}-${index}`}><AsyncImage className="talent-index ability-icon" src={abilityImageSources(talent.icon)} alt="" assetKey={`talents:${character.id}:${talent.name}`} fallback={<AssetPlaceholder kind="talent" />} /><div><div className="eyebrow">{talent.type ?? 'Talent'}</div><h3>{talent.name}</h3><p style={{ whiteSpace: 'pre-line' }}>{talent.description ?? 'Description unavailable.'}</p></div></article>)}</div> : <div className="empty-state">{gameDataLoading ? 'Loading skill descriptions…' : 'Skill descriptions are unavailable from the current source.'}</div>}</section>}
 
-    {tab === 'constellations' && <section className="panel player-panel"><SectionTitle eyebrow="CONSTELLATIONS" title="Constellations" description="See what changes at each constellation level before deciding whether you want to invest further." />{constellations.length ? <div className="constellation-list">{constellations.map((entry, index) => <article className="constellation-row" key={`${entry.name}-${index}`}><div className="constellation-marker"><AsyncImage className="ability-icon" src={abilityImageSources(entry.icon)} alt="" assetKey={`constellations:${character.id}:${entry.name}`} fallback={<AssetPlaceholder kind="talent" />} /><span>C{entry.level ?? index + 1}</span></div><div><h3>{entry.name}</h3><p>{entry.description ?? 'Loading description!'}</p></div></article>)}</div> : <div className="empty-state">{gameDataLoading ? 'Loading verified constellation descriptions!' : 'Constellation descriptions are being refreshed from the game-data source.'}</div>}</section>}
+    {tab === 'constellations' && <section className="panel player-panel"><SectionTitle eyebrow="CONSTELLATIONS" title="Constellations" description="See what changes at each constellation level before deciding whether you want to invest further." />{constellations.length ? <div className="constellation-list">{constellations.map((entry, index) => <article className="constellation-row" key={`${entry.name}-${index}`}><div className="constellation-marker"><AsyncImage className="ability-icon" src={abilityImageSources(entry.icon)} alt="" assetKey={`constellations:${character.id}:${entry.name}`} fallback={<AssetPlaceholder kind="talent" />} /><span>C{entry.level ?? index + 1}</span></div><div><h3>{entry.name}</h3><p style={{ whiteSpace: 'pre-line' }}>{entry.description ?? 'Description unavailable.'}</p></div></article>)}</div> : <div className="empty-state">{gameDataLoading ? 'Loading constellation descriptions…' : 'Constellation descriptions are unavailable from the current source.'}</div>}</section>}
 
     {tab === 'materials' && <section className="panel player-panel"><SectionTitle eyebrow="LEVELING MATERIALS" title={`${displayName} leveling materials`} description="Materials required to raise this character." />{materials.length ? <div className="material-table">{materials.map((material, index) => <div className="material-row player-material-row" key={`${material.name}-${index}`}><MaterialImage name={material.name} entity={materialEntities[material.name]} /><span><strong>{material.name}</strong>{material.category && <small>{material.category}</small>}</span><strong>{material.amount ?? '—'}</strong></div>)}</div> : <div className="player-empty"><div><strong>No material list was returned.</strong><p>The live source does not currently expose material requirements for this character.</p></div></div>}</section>}
 
@@ -527,7 +494,7 @@ export function CharacterPage() {
         <h2>{selectedRecommendation.name}</h2>
         {selectedRecommendation.rarity && <div className="gold-stars">{'★'.repeat(selectedRecommendation.rarity)}</div>}
         {selectedWeapon ? <>
-          <div className="build-stat-grid"><div><span>Base ATK (Lv. 1)</span><strong>{selectedWeapon.baseAttack ?? 'N/A'}</strong></div><div><span>Secondary stat</span><strong>{selectedWeapon.secondaryStat ?? 'N/A'}</strong></div><div><span>Value</span><strong>{selectedWeapon.secondaryValue ?? 'N/A'}</strong></div></div>
+          <div className="build-stat-grid"><div><span>Base ATK (Lv. 1)</span><strong>{selectedWeapon.baseAttack ?? '—'}</strong></div><div><span>Secondary stat</span><strong>{selectedWeapon.secondaryStat ?? '—'}</strong></div><div><span>Value</span><strong>{selectedWeapon.secondaryValue ?? '—'}</strong></div></div>
           {selectedWeapon.effectName && <h3>{selectedWeapon.effectName}</h3>}
 
           {Object.keys(selectedWeaponRefinements).length > 0 && (

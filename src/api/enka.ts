@@ -4,6 +4,19 @@ import { fetchArtifactNames } from './artifactNames';
 
 const BASE_URL = 'https://enka.network/api';
 
+/** Lightweight shared catalog for missing kit icons, without fetching UID/locales. */
+export async function fetchEnkaCharacters(signal?: AbortSignal, forceRefresh = false): Promise<EnkaMetadata['characters']> {
+  const base = 'https://raw.githubusercontent.com/EnkaNetwork/API-docs/master/store';
+  const load = (file: string) => getJson<EnkaMetadata['characters']>(`${base}/${file}.json`, signal, {
+    cacheKey: `enka:metadata:v2:${file}`, ttlMs: 24 * 60 * 60 * 1000, forceRefresh, timeoutMs: 6_000,
+  });
+  try { return await load('gi/avatars'); }
+  catch (error) {
+    if (signal?.aborted || !(error instanceof Error) || !error.message.includes('(404)')) throw error;
+    return load('characters');
+  }
+}
+
 type ReaderResponse = {
   data?: {
     content?: string;
