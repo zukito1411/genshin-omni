@@ -1,5 +1,5 @@
 import { NavLink, Outlet, useNavigate } from 'react-router-dom';
-import { BookOpen, Boxes, Compass, Eye, EyeOff, Home, Map, Search, Shield, Swords, Users } from 'lucide-react';
+import { ArrowLeftRight, BookOpen, Boxes, Compass, Eye, EyeOff, Home, ListChecks, Map, Search, Shield, Swords, UserRound, Users } from 'lucide-react';
 import { useMemo, useState, type FormEvent, type KeyboardEvent } from 'react';
 import { useCharacters } from '../hooks/useCharacters';
 import { clearAppCache } from '../api/cache';
@@ -11,6 +11,9 @@ const nav = [
   { to: '/weapons', label: 'Weapons', icon: Swords },
   { to: '/artifacts', label: 'Artifacts', icon: Boxes },
   { to: '/teams', label: 'Team Builder', icon: Shield },
+  { to: '/materials', label: 'Farming Plan', icon: ListChecks },
+  { to: '/compare', label: 'Compare', icon: ArrowLeftRight },
+  { to: '/account', label: 'My Roster', icon: UserRound },
   { to: '/map', label: 'Interactive Map', icon: Map },
   { to: '/guides', label: 'Guides / FAQ', icon: BookOpen },
 ];

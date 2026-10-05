@@ -10,17 +10,7 @@ function queryUrl(folder: string, query: string, extra: Record<string, string> =
   return `${BASE_URL}/${folder}?${params.toString()}`;
 }
 
-const TRAVELER_ELEMENTS = [
-  'anemo',
-  'geo',
-  'electro',
-  'dendro',
-  'hydro',
-  'pyro',
-  'cryo',
-] as const;
-
-type TravelerElement = typeof TRAVELER_ELEMENTS[number];
+type TravelerElement = 'anemo' | 'geo' | 'electro' | 'dendro' | 'hydro' | 'pyro' | 'cryo';
 
 function getTravelerElement(query: string): TravelerElement | undefined {
   return query.match(

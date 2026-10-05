@@ -1,6 +1,5 @@
 import {
   useEffect,
-  useMemo,
   useRef,
   useState,
 } from 'react';
@@ -103,17 +102,6 @@ function formatNewsDate(value?: string): string {
 
 export function DashboardPage() {
   const { allCharacters, loading } = useCharacters('');
-
-  const favorites = useMemo(
-    () =>
-      allCharacters
-        .filter(
-          (character) =>
-            localStorage.getItem(`favorite:${character.id}`) === '1',
-        )
-        .slice(0, 6),
-    [allCharacters],
-  );
 
   const [news, setNews] = useState<GenshinNewsItem[]>([]);
   const [newsIndex, setNewsIndex] = useState(0);

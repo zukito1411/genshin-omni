@@ -8,7 +8,7 @@ import {
   useState,
   type ReactNode,
 } from 'react';
-import { useLocation } from 'react-router-dom';
+import { useLocation, useNavigate } from 'react-router-dom';
 
 type PaimonAction =
   | 'idle'
@@ -31,6 +31,9 @@ export type PaimonPage =
   | 'artifacts'
   | 'artifact'
   | 'teams'
+  | 'materials'
+  | 'compare'
+  | 'account'
   | 'map'
   | 'guides'
   | 'sources';
@@ -65,6 +68,9 @@ function getPageFromPath(pathname: string): PaimonPage {
   if (pathname === '/weapons') return 'weapons';
   if (pathname === '/artifacts') return 'artifacts';
   if (pathname === '/teams') return 'teams';
+  if (pathname === '/materials') return 'materials';
+  if (pathname === '/compare') return 'compare';
+  if (pathname === '/account') return 'account';
   if (pathname === '/map') return 'map';
   if (pathname === '/guides') return 'guides';
   if (pathname === '/sources') return 'sources';
@@ -177,8 +183,69 @@ function buildElementLines(label: string): string[] {
   ];
 }
 
+type PaimonHelpReply = {
+  text: string;
+  route?: string;
+  actionLabel?: string;
+  source?: 'ai' | 'native';
+};
+
+function getPaimonHelpReply(question: string, page: PaimonPage, name?: string): PaimonHelpReply {
+  const query = question.trim().toLowerCase();
+  const now = new Date();
+  if (/\bhow are you\b|\bare you okay\b/.test(query)) {
+    return { text: randomItem(['Paimon is doing great! Thanks for asking, Traveler!', 'Paimon is feeling sparkly and ready to help!', 'Paimon is good! A little hungry, but good!']) };
+  }
+  if (/\b(what(?:\'s| is)? the )?time\b|\btime is it\b/.test(query)) {
+    return { text: `It’s ${new Intl.DateTimeFormat(undefined, { hour: 'numeric', minute: '2-digit' }).format(now)} on your device.` };
+  }
+  if (/\b(today|date|day is it)\b/.test(query)) {
+    return { text: `Today is ${new Intl.DateTimeFormat(undefined, { weekday: 'long', month: 'long', day: 'numeric' }).format(now)}.` };
+  }
+  if (/^(hi|hello|hey|yo)\b/.test(query)) {
+    return { text: randomItem(['Hi, Traveler! What are we working on?', 'Hello! Paimon is ready!', 'Hey! Need a hand with your adventure?']) };
+  }
+  if (/\bwho are you\b|\bwhat are you\b/.test(query)) {
+    return { text: 'Paimon is your Teyvat Atlas helper! Paimon can point you to builds, materials, teams, comparisons, your roster, and the map.' };
+  }
+  if (/\bthank(s| you)\b/.test(query)) {
+    return { text: 'You’re welcome! Paimon is happy to help!' };
+  }
+  if (/\b(joke|funny)\b/.test(query)) {
+    return { text: 'Why did the Hilichurl bring a ladder? It heard the Adventure Rank was going up!' };
+  }
+  if (/\b(bye|goodbye|see you)\b/.test(query)) {
+    return { text: 'See you later, Traveler! Don’t forget your resin!' };
+  }
+  if (/farm|material|resin|domain|boss/.test(query)) {
+    return { text: 'Let’s make a farming checklist from the characters you want to raise.', route: '/materials', actionLabel: 'Open Farming Plan' };
+  }
+  if (/team|reaction|resonance|rotation|party/.test(query)) {
+    return { text: 'Pick four characters, assign their roles, then check the reaction and resonance hints.', route: '/teams', actionLabel: 'Open Team Builder' };
+  }
+  if (/compare|versus| vs |better/.test(query)) {
+    return { text: 'The comparison tool puts progression and sourced build guidance side by side.', route: '/compare', actionLabel: 'Compare Characters' };
+  }
+  if (/roster|own|owned|uid|account|showcase/.test(query)) {
+    return { text: 'You can mark your roster locally, or look up the public characters a UID has chosen to showcase.', route: '/account', actionLabel: 'Open My Roster' };
+  }
+  if (/weapon|artifact|build|talent|constellation/.test(query)) {
+    if (page === 'character' && name) return { text: `You’re already viewing ${name}. Try Build & Teams, then Skills or Materials for the next decision.` };
+    return { text: 'Open a character to see their current build sources, talents, materials, weapons, and artifact options.', route: '/characters', actionLabel: 'Browse Characters' };
+  }
+  if (/map|explore|chest|waypoint/.test(query)) {
+    return { text: 'The official interactive map has the most complete current exploration filters.', route: '/map', actionLabel: 'Open Map' };
+  }
+  if (page === 'materials') return { text: 'Choose characters first, then Build checklist. Paimon only shows a farming day when the source actually provides one.' };
+  if (page === 'teams') return { text: 'Give each teammate the role you intend them to perform. The advisor then checks coverage and possible reactions without guessing your builds.' };
+  if (page === 'compare') return { text: 'Choose a character on each side. Paimon will line up progression and current sourced build guidance.' };
+  if (page === 'account') return { text: 'Your local roster stays in this browser. A UID can only show the account’s public Enka showcase.' };
+  return { text: 'Ask Paimon about materials, teams, comparisons, your roster, builds, or exploration!' };
+}
+
 export function PaimonCompanion() {
   const { page, name, shown } = usePaimonContext();
+  const navigate = useNavigate();
   const disabled = page === 'map';
 
   const [visible, setVisible] = useState(true);
@@ -189,6 +256,10 @@ export function PaimonCompanion() {
   const [isAfk, setIsAfk] = useState(false);
   const [afkHidden, setAfkHidden] = useState(false);
   const [speech, setSpeech] = useState<string>(() => getInitialGreeting());
+  const [helperOpen, setHelperOpen] = useState(false);
+  const [helperQuestion, setHelperQuestion] = useState('');
+  const [helperReply, setHelperReply] = useState<PaimonHelpReply | null>(null);
+  const [helperStatus, setHelperStatus] = useState<'idle' | 'thinking' | 'ai' | 'native'>('idle');
 
   const actionTimeoutRef = useRef<number | null>(null);
   const movementTimeoutRef = useRef<number | null>(null);
@@ -204,6 +275,8 @@ export function PaimonCompanion() {
   const afkHiddenRef = useRef(afkHidden);
   const lastSpeechRef = useRef<string>(speech);
   const afkBoredCountRef = useRef(0);
+  const helperRequestRef = useRef(0);
+  const helperAbortRef = useRef<AbortController | null>(null);
 
   visibleRef.current = visible;
   isAfkRef.current = isAfk;
@@ -350,6 +423,24 @@ export function PaimonCompanion() {
           'What kind of team are we building?',
           'Hmm... who works well together?',
         ];
+      case 'materials':
+        return [
+          'Let’s make a farming plan!',
+          'Paimon can help with those materials!',
+          'Who are we leveling today?',
+        ];
+      case 'compare':
+        return [
+          'Who are we comparing?',
+          'Let’s look at both options!',
+          'Paimon loves a good side-by-side check!',
+        ];
+      case 'account':
+        return [
+          'Paimon wants to see your roster!',
+          'Which characters do you have?',
+          'A public showcase only shows what its player shares.',
+        ];
       case 'guides':
         return [
           'Paimon hopes this guide helps!',
@@ -436,6 +527,18 @@ export function PaimonCompanion() {
       teams: [
         'Elemental reactions are important when building teams.',
         'Different roles can fit together in one team.',
+      ],
+      materials: [
+        'Weapon and talent materials can be available on different days.',
+        'A farming checklist is easier than remembering every material.',
+      ],
+      compare: [
+        'A comparison can help separate base stats from build recommendations.',
+        'A character’s best build can depend on their team.',
+      ],
+      account: [
+        'A public UID showcase does not reveal a player’s whole roster.',
+        'Paimon keeps local roster choices in this browser.',
       ],
       map: [],
       guides: [
@@ -947,6 +1050,85 @@ export function PaimonCompanion() {
     playTemporaryAction(reaction.action, 1200, reaction.text);
   }
 
+  function showHelperReply(reply: PaimonHelpReply) {
+    setHelperReply(reply);
+    resetAfkTimer();
+    clearActionTimeout();
+    clearMovementTimeout();
+    actionBusyRef.current = true;
+    setFrame(0);
+    setAction('waving');
+    say(reply.text);
+    // Keep a requested answer in Paimon's speech bubble. The helper panel
+    // retains it too, so an animation cannot make an answer disappear.
+    actionTimeoutRef.current = window.setTimeout(() => {
+      actionBusyRef.current = false;
+      setFrame(0);
+      setAction('idle');
+      actionTimeoutRef.current = null;
+    }, 6000);
+  }
+
+  async function askPaimon(question: string) {
+    const fallbackReply = getPaimonHelpReply(question, page, name);
+    const requestId = helperRequestRef.current + 1;
+    helperRequestRef.current = requestId;
+    helperAbortRef.current?.abort();
+
+    const controller = new AbortController();
+    helperAbortRef.current = controller;
+    setHelperQuestion(question);
+    setHelperStatus('thinking');
+    showHelperReply({ text: 'Paimon is thinking...', source: 'ai' });
+
+    try {
+      const localTime = new Intl.DateTimeFormat(undefined, {
+        dateStyle: 'full',
+        timeStyle: 'short',
+      }).format(new Date());
+      const response = await fetch('/api/paimon-chat', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ question, page, name, localTime }),
+        signal: controller.signal,
+      });
+      const payload = await response.json() as { reply?: unknown };
+      const reply = typeof payload.reply === 'string' ? payload.reply.trim() : '';
+
+      if (!response.ok || !reply) {
+        throw new Error('AI response unavailable');
+      }
+
+      if (helperRequestRef.current !== requestId) return;
+      setHelperStatus('ai');
+      showHelperReply({ ...fallbackReply, text: reply, source: 'ai' });
+    } catch {
+      if (controller.signal.aborted || helperRequestRef.current !== requestId) return;
+      setHelperStatus('native');
+      showHelperReply({ ...fallbackReply, source: 'native' });
+    } finally {
+      if (helperRequestRef.current === requestId) {
+        helperAbortRef.current = null;
+      }
+    }
+  }
+
+  function openHelper() {
+    if (afkHiddenRef.current) wakeFromAfk();
+    setHelperOpen(true);
+    if (!helperReply) {
+      setHelperStatus('native');
+      setHelperReply({ ...getPaimonHelpReply('help', page, name), source: 'native' });
+    }
+  }
+
+  function useHelperAction() {
+    if (!helperReply?.route) return;
+    navigate(helperReply.route);
+    setHelperOpen(false);
+    say('Right this way, Traveler!');
+  }
+
   useEffect(() => {
     if (!visible || disabled || !shown) return;
 
@@ -1135,6 +1317,14 @@ export function PaimonCompanion() {
         return;
       }
 
+      if (target.closest('[data-paimon-help]')) {
+        return;
+      }
+
+      if (target.closest('[data-paimon-button]')) {
+        return;
+      }
+
       if (target.closest('[data-paimon-companion]')) {
         event.preventDefault();
         event.stopPropagation();
@@ -1179,6 +1369,7 @@ export function PaimonCompanion() {
 
   useEffect(() => {
     return () => {
+      helperAbortRef.current?.abort();
       clearActionTimeout();
       clearMovementTimeout();
       clearAfkTimeout();
@@ -1187,14 +1378,15 @@ export function PaimonCompanion() {
     };
   }, []);
 
-  if (disabled || !shown || !visible || afkHidden) return null;
+  if (disabled || !shown) return null;
 
   const row = spriteRows[action];
   const backgroundX = frame * 256;
   const backgroundY = row * 256;
 
   return (
-    <div
+    <>
+      {visible && !afkHidden && <div
       className={`paimon-companion paimon-companion--${presence}`}
       style={{
         left: `${position.x}%`,
@@ -1230,9 +1422,9 @@ export function PaimonCompanion() {
       <button
         type="button"
         className="paimon-companion__button"
-        aria-label="Interact with Paimon"
-        tabIndex={-1}
-        style={{ pointerEvents: 'none' }}
+        aria-label="Interact with Paimon. Open the Paimon helper with the nearby help button."
+        data-paimon-button
+        onClick={handlePaimonClick}
       >
         <div
           className="paimon-companion__sprite"
@@ -1242,6 +1434,37 @@ export function PaimonCompanion() {
           }}
         />
       </button>
-    </div>
+      </div>}
+
+      <button
+        type="button"
+        className="paimon-launcher"
+        data-paimon-help
+        onClick={openHelper}
+        aria-label="Open Paimon helper"
+        aria-expanded={helperOpen}
+        aria-controls="paimon-helper"
+      >
+        <span className="paimon-launcher__face" aria-hidden="true" />
+        <span className="paimon-launcher__label">Ask Paimon</span>
+      </button>
+
+      {helperOpen && <aside id="paimon-helper" className="paimon-helper" data-paimon-help aria-label="Paimon helper">
+        <div className="paimon-helper__heading"><div><div className="eyebrow">PAIMON HELPER</div><strong>What are we doing?</strong></div><button type="button" data-paimon-help onClick={() => setHelperOpen(false)} aria-label="Close Paimon helper">×</button></div>
+        <p aria-live="polite" aria-busy={helperStatus === 'thinking'}>{helperReply?.text ?? 'Ask Paimon about materials, teams, comparisons, your roster, builds, or the map.'}</p>
+        <div className="paimon-helper__suggestions" data-paimon-help>{[
+          ['Plan materials', 'How do I plan materials?'],
+          ['Check a team', 'How do reactions work?'],
+          ['Compare characters', 'Compare characters'],
+          ['My roster', 'How do I use my UID?'],
+        ].map(([label, question]) => <button type="button" key={label} data-paimon-help onClick={() => void askPaimon(question)}>{label}</button>)}</div>
+        <form data-paimon-help onSubmit={(event) => { event.preventDefault(); void askPaimon(helperQuestion || 'help'); }}>
+          <label htmlFor="paimon-helper-question">Ask Paimon</label>
+          <div><input id="paimon-helper-question" value={helperQuestion} onChange={(event) => setHelperQuestion(event.target.value)} placeholder="Materials, teams, roster…" /><button type="submit">Ask</button></div>
+        </form>
+        {helperReply?.route && <button type="button" className="button primary paimon-helper__action" data-paimon-help onClick={useHelperAction}>{helperReply.actionLabel ?? 'Open tool'}</button>}
+        <small>{helperStatus === 'thinking' ? 'Asking AI Paimon…' : helperReply?.source === 'ai' ? 'AI Paimon is answering. Your message was sent to the configured AI provider.' : 'Built-in Paimon is answering. AI is unavailable or has not been configured.'}</small>
+      </aside>}
+    </>
   );
 }

@@ -48,3 +48,23 @@ Publish directory: dist
 ```
 
 The included `render.yaml` also contains the SPA rewrite so direct routes such as `/characters/albedo` continue to work.
+
+## AI Paimon on Netlify
+
+The optional AI reply runs through the Netlify Function at `/api/paimon-chat`.
+It keeps the xAI key on the server: never add the key to a Vite variable, `.env`
+file committed to Git, or frontend source code.
+
+In **Netlify → Site configuration → Environment variables**, add:
+
+```text
+XAI_API_KEY = <a newly generated xAI API key>
+XAI_MODEL = grok-4.7
+```
+
+`XAI_MODEL` is optional and can be changed to another xAI model available to
+the account. Redeploy after setting the variables. When the AI endpoint is
+missing, unavailable, or returns an error, Paimon automatically uses the
+built-in browser guide instead.
+
+Render is configured as a static site, so it does not host this function.

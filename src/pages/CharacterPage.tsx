@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Link, useParams, useSearchParams } from 'react-router-dom';
-import { Check, ExternalLink, Heart, Sparkles, Swords } from 'lucide-react';
+import { Check, ExternalLink, Sparkles, Swords } from 'lucide-react';
 import { fetchAggregatedCharacter } from '../api/aggregator';
 import { assetKey, characterImageSources, elementImageSources, entityImageSources, fetchGenshinBuildsAssetMap, findGenshinBuildsAsset, genshinBuildsMaterialImage } from '../api/genshinDev';
 import { fetchCharacter, fetchEntity, fetchStats } from '../api/genshinDb';
@@ -93,7 +93,6 @@ function catalogName(value: string): string {
 }
 
 function recommendationImageSources(folder: 'weapons' | 'artifacts', name: string, entity?: LibraryEntity, catalogImage?: string): string[] {
-  const cleanName = catalogName(name);
   // Only use a verified catalog URL or an image field returned for the resolved
   // entity. Guessed paths created noisy browser 404s before falling back.
   return [catalogImage, ...(entity ? entityImageSources(folder, entity) : [])].filter(Boolean) as string[];
@@ -202,7 +201,6 @@ export function CharacterPage() {
   const [gameDataLoading, setGameDataLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [tab, setTab] = useState<'build' | 'skills' | 'constellations' | 'materials'>('build');
-  const [favorite, setFavorite] = useState(() => localStorage.getItem(`favorite:${activeCharacterQuery}`) === '1');
   const [liveGuide, setLiveGuide] = useState<LivePlayerGuide | null>(null);
   const [weaponEntities, setWeaponEntities] = useState<Record<string, LibraryEntity>>({});
   const [artifactEntities, setArtifactEntities] = useState<Record<string, LibraryEntity>>({});
@@ -232,7 +230,6 @@ export function CharacterPage() {
     setSelectedRecommendation(null);
     setSelectedRecommendationType(null);
     setWeaponProgressions({});
-    setFavorite(localStorage.getItem(`favorite:${activeCharacterQuery}`) === '1');
 
     // Render primary structured data first. Detailed sources then hydrate the
     // same page in place, so a slow scraper never requires a page reload.
@@ -385,18 +382,11 @@ export function CharacterPage() {
   const buildLinks = links(character.name);
   const guideSources = sourceLinksForGuide(guide);
   const imageSources = characterImageSources(character, 'portrait');
-  const characterId = activeCharacterQuery;
 
   function selectTravelerElement(element: TravelerElement) {
     const next = new URLSearchParams(searchParams);
     next.set('element', element.toLowerCase());
     setSearchParams(next, { replace: true });
-  }
-
-  function toggleFavorite() {
-    const next = !favorite;
-    setFavorite(next);
-    localStorage.setItem(`favorite:${characterId}`, next ? '1' : '0');
   }
 
   function openRecommendation(type: 'weapons' | 'artifacts', entity: LibraryEntity) {

@@ -9,6 +9,9 @@ import { GuidesPage } from './pages/GuidesPage';
 import { SourcesPage } from './pages/SourcesPage';
 import { LibraryPage } from './pages/LibraryPage';
 import { MapPage } from './pages/MapPage';
+import { MaterialsPage } from './pages/MaterialsPage';
+import { AccountPage } from './pages/AccountPage';
+import { ComparePage } from './pages/ComparePage';
 
 export default function App() {
   return (
@@ -44,6 +47,9 @@ export default function App() {
               }
             />
             <Route path="/teams" element={<TeamsPage />} />
+            <Route path="/materials" element={<MaterialsPage />} />
+            <Route path="/compare" element={<ComparePage />} />
+            <Route path="/account" element={<AccountPage />} />
             <Route path="/map" element={<MapPage />} />
             <Route path="/guides" element={<GuidesPage />} />
             <Route path="/sources" element={<SourcesPage />} />
