@@ -16,7 +16,7 @@ export function ProfilePage() {
   const [uid, setUid] = useState(() => selectedUid ?? savedUid());
   const [inputError, setInputError] = useState('');
   const [importMessage, setImportMessage] = useState('');
-  const { profile, loading, error, metadata, metadataError, retry } = useEnkaProfile(selectedUid);
+  const { profile, loading, error, metadata, metadataError, metadataLoading, retry } = useEnkaProfile(selectedUid);
   const { allCharacters } = useCharacters('');
   const player = profile?.playerInfo;
   const avatars = profile?.avatarInfoList ?? [];
@@ -63,6 +63,7 @@ export function ProfilePage() {
       <ProfileOverview profile={profile} metadata={metadata} uid={selectedUid ?? ''} />
       <section className="section-block"><SectionTitle eyebrow="CHARACTER SHOWCASE" title="Equipped builds" description="Select a character to see combat stats, talent levels, constellations, weapon, and every shared artifact." action={matched.length > 0 && <button type="button" className="button secondary" onClick={importRoster}>Add showcase to My Roster</button>} />
         {importMessage && <p role="status" className="muted">{importMessage}</p>}
+        {metadataLoading && <p className="muted">Loading character names and equipment definitions…</p>}
         {metadataError && <p className="muted">Names and images could not load. Build stats remain available. <button className="text-button" type="button" onClick={retry}>Retry</button></p>}
         {avatars.length ? <div className="showcase-grid">{avatars.map((avatar) => <Link className="showcase-card showcase-card--link" key={avatarKey(avatar)} to={`/profile/${selectedUid}/characters/${avatarKey(avatar)}`}>
           <AsyncImage src={avatarImage(avatar, metadata)} alt="" className="showcase-card__image" assetKey={`characters:${avatarKey(avatar)}:icon`} fallback={<AssetPlaceholder kind="character" />} />

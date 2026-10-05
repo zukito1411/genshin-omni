@@ -2,6 +2,8 @@ export interface EnkaStat {
   mainPropId?: string;
   appendPropId?: string;
   propValue?: number;
+  statValue?: number;
+  appendPropID?: string;
 }
 
 export interface EnkaEquipment {
@@ -10,7 +12,9 @@ export interface EnkaEquipment {
   reliquary?: { level?: number; mainPropId?: number; appendPropIdList?: number[] };
   flat?: {
     nameTextMapHash?: string | number;
+    nameTextHashMap?: string | number;
     setNameTextMapHash?: string | number;
+    setNameTextHashMap?: string | number;
     rankLevel?: number;
     icon?: string;
     itemType?: string;
@@ -65,13 +69,18 @@ export interface EnkaCharacterMetadata {
   Skills?: Record<string, string>;
   SkillOrder?: number[];
   ProudMap?: Record<string, number>;
-  Costumes?: Record<string, { icon?: string; art?: string }>;
+  Costumes?: Record<string, { icon?: string; art?: string; Icon?: string; Art?: string }>;
   QualityType?: string;
 }
 
 export interface EnkaMetadata {
   characters: Record<string, EnkaCharacterMetadata>;
   text: Record<string, string>;
-  namecards?: Record<string, { icon?: string }>;
-  profilePictures?: Record<string, { iconPath?: string }>;
+  namecards?: Record<string, { icon?: string; Icon?: string }>;
+  profilePictures?: Record<string, { iconPath?: string; IconPath?: string }>;
+  weapons?: Record<string, { NameTextMapHash?: string | number; Rarity?: number; Icon?: string; BaseProps?: Record<string, number>; PropGrowCurves?: Record<string, number>; BasePromote?: number[] }>;
+  relics?: { Items?: Record<string, { Rarity?: number; EquipType?: number; Icon?: string; SetId?: number }>; Sets?: Record<string, { Name?: string }> };
+  curves?: Record<string, number[]>;
+  relicLevels?: Record<string, Record<string, Record<string, number>>>;
+  affixes?: Record<string, { PropType: number; Value: number }>;
 }

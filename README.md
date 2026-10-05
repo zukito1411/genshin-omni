@@ -85,6 +85,12 @@ owned roster, or detailed Abyss/Theater histories; missing fields remain unavail
 Artwork uses exact filenames from provider metadata with independent image
 fallbacks and decorative placeholders when no image can be downloaded.
 
+UID builds support both current and legacy equipment fields. Missing resolved
+weapon stats are calculated from the official catalog's level/ascension curves;
+artifact main stats and substats use level tables and the snapshot's individual
+roll IDs. Supplied values always take precedence, and unknown rolls are not
+presented as partial totals. Searching the same UID refreshes its data and definitions.
+
 On touch devices and screens up to 700px wide, hold the Paimon bubble briefly and drag it.
 Releasing docks it halfway against the nearest edge and remembers the position
 on this device. A tap opens the helper.

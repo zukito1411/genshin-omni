@@ -23,8 +23,9 @@ export function avatarMetadata(avatar: EnkaAvatar, metadata?: EnkaMetadata | nul
   return metadata?.characters[`${avatarId(avatar)}-${avatar.skillDepotId}`] ?? metadata?.characters[avatarId(avatar)];
 }
 
-export function enkaText(hash: string | number | undefined, metadata?: EnkaMetadata | null, fallback = 'Unknown item'): string {
-  return hash === undefined ? fallback : metadata?.text[String(hash)] ?? fallback;
+export function enkaText(hash: string | number | undefined, metadata?: EnkaMetadata | null, fallback = 'Name unavailable'): string {
+  const value = hash === undefined ? undefined : metadata?.text[String(hash)];
+  return typeof value === 'string' && value.trim() && !/^\d+$/.test(value.trim()) ? value.trim() : fallback;
 }
 
 export function enkaImage(icon?: string): string[] {
@@ -33,7 +34,8 @@ export function enkaImage(icon?: string): string[] {
 
 export function avatarImage(avatar: EnkaAvatar, metadata?: EnkaMetadata | null): string[] {
   const character = avatarMetadata(avatar, metadata);
-  const costume = character?.Costumes?.[String(avatar.costumeId)]?.icon;
+  const skin = character?.Costumes?.[String(avatar.costumeId)];
+  const costume = skin?.Icon ?? skin?.icon;
   return enkaImage(costume ?? character?.SideIconName?.replace('_Side_', '_'));
 }
 
@@ -41,7 +43,7 @@ export function avatarArtwork(avatar: EnkaAvatar, metadata?: EnkaMetadata | null
   const character = avatarMetadata(avatar, metadata);
   const costume = character?.Costumes?.[String(avatar.costumeId)];
   const icon = character?.SideIconName?.replace('_Side_', '_');
-  const art = costume?.art ?? icon?.replace('UI_AvatarIcon_', 'UI_Gacha_AvatarImg_');
+  const art = costume?.Art ?? costume?.art ?? icon?.replace('UI_AvatarIcon_', 'UI_Gacha_AvatarImg_');
   return [...enkaImage(art), ...avatarImage(avatar, metadata)];
 }
 
@@ -52,16 +54,18 @@ export function avatarElement(avatar: EnkaAvatar, metadata?: EnkaMetadata | null
 
 export function profileImage(profile: EnkaProfile, metadata?: EnkaMetadata | null): string[] {
   const picture = profile.playerInfo.profilePicture;
-  const custom = picture?.id ? metadata?.profilePictures?.[String(picture.id)]?.iconPath : undefined;
+  const customPicture = picture?.id ? metadata?.profilePictures?.[String(picture.id)] : undefined;
+  const custom = customPicture?.IconPath ?? customPicture?.iconPath;
   return custom ? enkaImage(custom) : picture?.avatarId ? avatarImage({ avatarId: picture.avatarId, costumeId: picture.costumeId }, metadata) : [];
 }
 
 export function namecardImage(id?: number, metadata?: EnkaMetadata | null): string[] {
-  return id ? enkaImage(metadata?.namecards?.[String(id)]?.icon) : [];
+  const card = id ? metadata?.namecards?.[String(id)] : undefined;
+  return enkaImage(card?.Icon ?? card?.icon);
 }
 
 export function avatarName(avatar: EnkaAvatar, metadata?: EnkaMetadata | null): string {
-  return enkaText(avatarMetadata(avatar, metadata)?.NameTextMapHash, metadata, `Character ${avatarId(avatar)}`);
+  return enkaText(avatarMetadata(avatar, metadata)?.NameTextMapHash, metadata, 'Character name unavailable');
 }
 
 export function avatarLevel(avatar: EnkaAvatar): string {
@@ -87,11 +91,11 @@ const STAT_NAMES: Record<string, string> = {
 };
 
 export function equipmentStat(stat?: EnkaStat): { label: string; value: string } {
-  const id = stat?.mainPropId ?? stat?.appendPropId ?? '';
+  const id = stat?.mainPropId ?? stat?.appendPropId ?? stat?.appendPropID ?? '';
   const percentage = /PERCENT|CRITICAL|CHARGE_EFFICIENCY|HEAL_ADD|ADD_HURT/.test(id);
-  const value = stat?.propValue;
+  const value = stat?.statValue ?? stat?.propValue;
   return {
-    label: STAT_NAMES[id] ?? (id ? id.replace('FIGHT_PROP_', '').replaceAll('_', ' ') : 'Stat'),
+    label: STAT_NAMES[id] ?? 'Other attribute',
     // Equipment percentages are already expressed in percentage points by Enka.
     value: typeof value === 'number' && Number.isFinite(value)
       ? `${value.toLocaleString(undefined, { maximumFractionDigits: percentage ? 1 : 0 })}${percentage ? '%' : ''}` : '—',

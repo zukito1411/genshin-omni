@@ -1,4 +1,5 @@
 import { expect, test, type Page } from '@playwright/test';
+import type { EnkaProfile } from '../src/types/enka';
 
 const artifactSlots = ['flower', 'plume', 'sands', 'goblet', 'circlet'];
 const artifactIcons = [4, 2, 5, 1, 3].map((slot) => `UI_RelicIcon_14001_${slot}`);
@@ -17,8 +18,8 @@ const avatar = {
   fightPropMap: { '2000': 20000, '2001': 2100, '2002': 900, '20': 0.455, '22': 2.1, '23': 1.3, '28': 40, '46': 0.466, '81': 0.35 },
   skillLevelMap: { '10024': 10, '10018': 10, '10019': 10 }, proudSkillExtraLevelMap: { '232': 3 },
   equipList: [
-    { itemId: 11509, weapon: { level: 90, affixMap: { '111509': 0 } }, flat: { icon: 'UI_EquipIcon_Sword_Narukami', itemType: 'ITEM_WEAPON', nameTextMapHash: '100', rankLevel: 5, weaponStats: [{ appendPropId: 'FIGHT_PROP_BASE_ATTACK', propValue: 674 }, { appendPropId: 'FIGHT_PROP_CRITICAL_HURT', propValue: 44.1 }] } },
-    ...['EQUIP_BRACER', 'EQUIP_NECKLACE', 'EQUIP_SHOES', 'EQUIP_RING', 'EQUIP_DRESS'].map((slot, index) => ({ itemId: 7000 + index, reliquary: { level: 21 }, flat: { icon: artifactIcons[index], itemType: 'ITEM_RELIQUARY', equipType: slot, rankLevel: 5, nameTextMapHash: '101', setNameTextMapHash: '102', reliquaryMainstat: { mainPropId: 'FIGHT_PROP_ATTACK_PERCENT', propValue: 46.6 }, reliquarySubstats: [{ appendPropId: 'FIGHT_PROP_CRITICAL', propValue: 10.1 }, { appendPropId: 'FIGHT_PROP_CRITICAL_HURT', propValue: 20.2 }] } })),
+    { itemId: 11509, weapon: { level: 90, affixMap: { '111509': 0 } }, flat: { icon: 'UI_EquipIcon_Sword_Narukami', itemType: 'ITEM_WEAPON', nameTextMapHash: '100', rankLevel: 5, weaponStats: [{ appendPropId: 'FIGHT_PROP_BASE_ATTACK', statValue: 674 }, { appendPropId: 'FIGHT_PROP_CRITICAL_HURT', statValue: 44.1 }] } },
+    ...['EQUIP_BRACER', 'EQUIP_NECKLACE', 'EQUIP_SHOES', 'EQUIP_RING', 'EQUIP_DRESS'].map((slot, index) => ({ itemId: 7000 + index, reliquary: { level: 21 }, flat: { icon: artifactIcons[index], itemType: 'ITEM_RELIQUARY', equipType: slot, rankLevel: 5, nameTextMapHash: '101', setNameTextMapHash: '102', reliquaryMainstat: { mainPropId: 'FIGHT_PROP_ATTACK_PERCENT', statValue: 46.6 }, reliquarySubstats: [{ appendPropId: 'FIGHT_PROP_CRITICAL', statValue: 10.1 }, { appendPropId: 'FIGHT_PROP_CRITICAL_HURT', statValue: 20.2 }] } })),
   ],
 };
 const profile = { playerInfo: { nickname: 'Test Traveler', signature: 'Public showcase', level: 60, worldLevel: 9, finishAchievementNum: 1200, towerFloorIndex: 12, towerLevelIndex: 3, nameCardId: 210001, profilePicture: { avatarId: 10000002 }, showNameCardIdList: [210001] }, avatarInfoList: [avatar] };
@@ -32,10 +33,15 @@ async function mockSources(page: Page, options: { hidden?: boolean; directFailur
       if (url.includes('r.jina.ai/')) return route.fulfill({ json: { data: { content: JSON.stringify(payload) } } });
       return options.directFailure ? route.fulfill({ status: 403 }) : route.fulfill({ json: payload });
     }
-    if (url.endsWith('/characters.json')) {
+    if (url.endsWith('/characters.json') || url.endsWith('/avatars.json')) {
       return options.metadataFailure ? route.fulfill({ status: 403 }) : route.fulfill({ json: { '10000002': { NameTextMapHash: 1, SideIconName: 'UI_AvatarIcon_Side_Ayaka', Element: 'Ice', QualityType: 'QUALITY_ORANGE', SkillOrder: [10024, 10018, 10019], Skills: { '10024': 'Skill_A_01', '10018': 'Skill_S_Ayaka_01', '10019': 'Skill_E_Ayaka_HD' }, Consts: Array.from({ length: 6 }, (_, index) => `UI_Talent_S_Ayaka_0${index + 1}`), ProudMap: { '10018': 232 } } } });
     }
-    if (url.endsWith('/loc.json')) return route.fulfill({ json: { en: { '1': 'Kamisato Ayaka', '100': 'Mistsplitter Reforged', '101': 'Frozen Homeland', '102': 'Blizzard Strayer' } } });
+    if (url.endsWith('/loc.json') || url.endsWith('/locs.json')) return route.fulfill({ json: { en: { '1': 'Kamisato Ayaka', '100': 'Mistsplitter Reforged', '101': 'Frozen Homeland', '102': 'Blizzard Strayer' } } });
+    if (url.endsWith('/weapons.json')) return route.fulfill({ json: { '11509': { NameTextMapHash: 100, Rarity: 5, Icon: '/ui/UI_EquipIcon_Sword_Narukami.png', BaseProps: { '4': 47.537, '22': .096 }, PropGrowCurves: { '4': 1302, '22': 2301 }, BasePromote: [0, 31.1, 62.2, 93.4, 124.5, 155.6, 186.7] } } });
+    if (url.endsWith('/curves.json')) return route.fulfill({ json: { '1302': Array.from({ length: 90 }, () => 10.258), '2301': Array.from({ length: 90 }, () => 4.594) } });
+    if (url.endsWith('/relics.json')) return route.fulfill({ json: { Items: { '7000': { Rarity: 5, EquipType: 0, SetId: 14001, Icon: '/ui/UI_RelicIcon_14001_4.png' } }, Sets: { '14001': { Name: '102' } } } });
+    if (url.endsWith('/relic_levels.json')) return route.fulfill({ json: { '5': { '21': { '6': .466, '2': 4780 } } } });
+    if (url.endsWith('/affixes.json')) return route.fulfill({ json: { '501204': { PropType: 20, Value: .0389 }, '501224': { PropType: 22, Value: .0777 } } });
     if (url.endsWith('/namecards.json')) return route.fulfill({ json: { '210001': { icon: 'UI_NameCardPic_Ayaka_P' } } });
     if (url.endsWith('/pfps.json')) return route.fulfill({ json: {} });
     if (/\/(?:UI_|Skill_)[\w-]+\.(?:png|webp)(?:\?|$)/.test(url)) {
@@ -108,13 +114,128 @@ test('reader fallback and hidden builds remain usable', async ({ page }) => {
   await expect(page.locator('.empty-state')).toContainText('no longer in the public showcase');
 });
 
+test('current metadata resolves character variants, relative artwork, and abbreviated equipment', async ({ page }) => {
+  await page.setViewportSize({ width: 320, height: 740 });
+  await mockSources(page);
+  const current: EnkaProfile = structuredClone(profile);
+  const build = current.avatarInfoList![0];
+  build.avatarId = 10000117;
+  build.skillDepotId = 11703;
+  build.equipList = [
+    { itemId: 11509, weapon: { level: 90, promoteLevel: 6, affixMap: { '111509': 0 } }, flat: { icon: 'UI_EquipIcon_Sword_Narukami', itemType: 'ITEM_WEAPON', weaponStats: [{ appendPropId: 'FIGHT_PROP_BASE_ATTACK' }, { appendPropId: 'FIGHT_PROP_CRITICAL_HURT' }] } },
+    { itemId: 7000, reliquary: { level: 21, appendPropIdList: [501204, 501204, 501224] }, flat: { icon: 'UI_RelicIcon_14001_4', itemType: 'ITEM_RELIQUARY', reliquaryMainstat: { mainPropId: 'FIGHT_PROP_ATTACK_PERCENT' }, reliquarySubstats: [{ appendPropId: 'FIGHT_PROP_CRITICAL' }, { appendPropId: 'FIGHT_PROP_CRITICAL_HURT' }] } },
+  ];
+  await page.route('**/api/uid/**', (route) => route.fulfill({ json: current }));
+  await page.route('**/gi/avatars.json', (route) => route.fulfill({ json: { '10000117-11703': { NameTextMapHash: 1, SideIconName: '/ui/UI_AvatarIcon_Side_Ayaka.png', SkillOrder: [10024, 10018, 10019], Skills: { '10024': '/ui/Skill_A_01.png' }, Costumes: { '200201': { Icon: '/ui/UI_AvatarIcon_AyakaCostumeFruhling.png', Art: '/ui/UI_Costume_AyakaCostumeFruhling.png' } } } } }));
+  await page.route('**/characters.json', (route) => route.fulfill({ status: 403 }));
+  await page.goto('/profile/800000001');
+  await expect(page.locator('.showcase-card--link')).toContainText('Kamisato Ayaka');
+  await page.locator('.showcase-card--link').click();
+  await expect(page).toHaveURL(/10000117-11703$/);
+  await expect(page.getByRole('heading', { name: 'Mistsplitter Reforged' })).toBeVisible();
+  const equipped = page.locator('.equipped-item').first();
+  await expect(equipped.locator('.build-stat-list')).toContainText('674');
+  await expect(equipped.locator('.build-stat-list')).toContainText('44.1%');
+  const artifact = page.locator('.equipped-artifact-grid .equipped-item').first();
+  await expect(artifact).toContainText('Blizzard Strayer · Flower');
+  await expect(artifact).toContainText('46.6%');
+  await expect(artifact).toContainText('7.8%');
+  await expect(page.locator('img.showcase-build-hero__image')).toHaveAttribute('src', /UI_Gacha_AvatarImg_Ayaka\.png/);
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
+});
+
+test('legacy equipment field aliases remain readable without applying percentage scaling twice', async ({ page }) => {
+  await mockSources(page);
+  const legacy: EnkaProfile = structuredClone(profile);
+  for (const item of legacy.avatarInfoList![0].equipList!) {
+    const flat = item.flat!;
+    flat.nameTextHashMap = flat.nameTextMapHash;
+    flat.setNameTextHashMap = flat.setNameTextMapHash;
+    delete flat.nameTextMapHash;
+    delete flat.setNameTextMapHash;
+    for (const stat of [...flat.weaponStats ?? [], ...flat.reliquarySubstats ?? [], ...flat.reliquaryMainstat ? [flat.reliquaryMainstat] : []]) {
+      stat.propValue = stat.statValue;
+      delete stat.statValue;
+      stat.appendPropID = stat.appendPropId;
+      delete stat.appendPropId;
+    }
+  }
+  await page.route('**/api/uid/**', (route) => route.fulfill({ json: legacy }));
+  await page.goto('/profile/800000001/characters/10000002-201');
+  await expect(page.getByRole('heading', { name: 'Mistsplitter Reforged' })).toBeVisible();
+  await expect(page.locator('.equipped-item').first()).toContainText('44.1%');
+  await expect(page.locator('.equipped-artifact-grid .equipped-item').first()).toContainText('46.6%');
+  await expect(page.locator('.equipped-artifact-grid .equipped-item').first()).toContainText('10.1%');
+});
+
+test('searching the same UID refreshes previously cached metadata and equipment', async ({ page }) => {
+  await mockSources(page);
+  await page.goto('/profile/800000001');
+  await expect(page.locator('.showcase-card--link')).toContainText('Kamisato Ayaka');
+  await page.route('**/gi/locs.json', (route) => route.fulfill({ json: { en: { '1': 'Updated character name', '100': 'Mistsplitter Reforged' } } }));
+  await page.getByRole('button', { name: 'Search UID' }).click();
+  await expect(page.locator('.showcase-card--link')).toContainText('Updated character name');
+});
+
+test('unknown artifact rolls never become misleading partial substat totals', async ({ page }) => {
+  await mockSources(page);
+  const incomplete: EnkaProfile = structuredClone(profile);
+  incomplete.avatarInfoList![0].equipList = [{ itemId: 7000, reliquary: { level: 21, appendPropIdList: [501204, 999999] }, flat: { equipType: 'EQUIP_BRACER', itemType: 'ITEM_RELIQUARY', reliquaryMainstat: { mainPropId: 'FIGHT_PROP_HP' } } }];
+  await page.route('**/api/uid/**', (route) => route.fulfill({ json: incomplete }));
+  await page.goto('/profile/800000001/characters/10000002-201');
+  const artifact = page.locator('.equipped-artifact-grid .equipped-item').first();
+  await expect(artifact).toContainText('4,780');
+  await expect(artifact).not.toContainText('3.9%');
+});
+
 test('mobile builds fit narrow screens and stats work when metadata is unavailable', async ({ page }) => {
   await page.setViewportSize({ width: 360, height: 740 });
   await mockSources(page, { metadataFailure: true });
   await page.goto('/profile/800000001/characters/10000002-201');
   await expect(page.locator('.showcase-stats').first()).toContainText('45.5%');
   await expect(page.locator('.equipped-artifact-grid .equipped-item')).toHaveCount(5);
+  await expect(page.getByRole('heading', { name: 'Character name unavailable', exact: true })).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'Weapon name unavailable', exact: true })).toBeVisible();
+  await expect(page.locator('.equipped-artifact-grid .equipped-item').first()).toContainText('Flower name unavailable');
+  await expect(page.locator('.showcase-talents')).toContainText('Shared talent');
+  expect(await page.locator('body').innerText()).not.toMatch(/\b(?:Character|Item|Weapon|Artifact|Set|Talent)\s+\d{3,}\b/i);
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
+});
+
+test('unknown IDs never appear as character, equipment, set, or talent labels', async ({ page }) => {
+  await mockSources(page);
+  const unknown: EnkaProfile = structuredClone(profile);
+  const build = unknown.avatarInfoList![0];
+  build.avatarId = 99887766;
+  build.skillLevelMap = { '88776655': 10 };
+  build.equipList = [
+    { itemId: 887766, weapon: { level: 90 }, flat: { nameTextMapHash: 88776655, weaponStats: [{ appendPropId: 'FIGHT_PROP_BASE_ATTACK', statValue: 674 }] } },
+    { itemId: 776655, reliquary: { level: 21 }, flat: { equipType: 'EQUIP_BRACER', nameTextMapHash: 77665544, setNameTextMapHash: 66554433, reliquaryMainstat: { mainPropId: 'FIGHT_PROP_NEW_99999', statValue: 12 } } },
+  ];
+  await page.route('**/api/uid/**', (route) => route.fulfill({ json: unknown }));
+  await page.goto('/profile/800000001');
+  const link = page.locator('.showcase-card--link');
+  await expect(link).toContainText('Character name unavailable');
+  await expect(link).not.toContainText('99887766');
+  await link.click();
+  await expect(page.getByRole('heading', { name: 'Weapon name unavailable' })).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'Flower name unavailable' })).toBeVisible();
+  await expect(page.locator('.artifact-set-summary')).toContainText('Set name unavailable');
+  await expect(page.locator('.showcase-talents')).toContainText('Shared talent');
+  await expect(page.locator('.equipped-artifact-grid')).toContainText('Other attribute');
+  expect(await page.locator('body').innerText()).not.toMatch(/\b(?:Character|Item|Weapon|Artifact|Set|Talent)\s+\d{3,}\b/i);
+  expect(await page.locator('body').innerText()).not.toMatch(/99887766|88776655|77665544|66554433|NEW_99999/);
+});
+
+test('blank or numeric localization entries cannot masquerade as display names', async ({ page }) => {
+  await mockSources(page);
+  await page.route('**/gi/locs.json', (route) => route.fulfill({ json: { en: { '1': '10000002', '100': '11509', '101': '   ', '102': '14001' } } }));
+  await page.goto('/profile/800000001/characters/10000002-201');
+  await expect(page.getByRole('heading', { name: 'Character name unavailable' })).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'Weapon name unavailable' })).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'Flower name unavailable' })).toBeVisible();
+  await expect(page.locator('.equipped-item').first()).toContainText('674');
+  await expect(page.locator('.equipped-item').first()).toContainText('44.1%');
 });
 
 test('mobile bubble taps, drags, docks, and persists without opening on drag', async ({ page }) => {

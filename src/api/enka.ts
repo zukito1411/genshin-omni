@@ -33,10 +33,10 @@ function validateProfile(payload: unknown): EnkaProfile {
   return profile;
 }
 
-export async function fetchEnkaByUid(uid: string, signal?: AbortSignal): Promise<EnkaProfile> {
+export async function fetchEnkaByUid(uid: string, signal?: AbortSignal, forceRefresh = false): Promise<EnkaProfile> {
   const clean = uid.trim();
   if (!/^\d{9,10}$/.test(clean)) throw new Error('A Genshin UID should contain 9 or 10 digits.');
-  const options = { cacheKey: `enka:uid:${clean}`, ttlMs: 10 * 60 * 1000, staleOnError: true };
+  const options = { cacheKey: `enka:uid:${clean}`, ttlMs: 10 * 60 * 1000, staleOnError: true, forceRefresh };
   try {
     return validateProfile(await getJson<unknown>(`${BASE_URL}/uid/${clean}/`, signal, options));
   } catch (directError) {
@@ -49,7 +49,7 @@ export async function fetchEnkaByUid(uid: string, signal?: AbortSignal): Promise
       const reader = await getJson<ReaderResponse>(
         `https://r.jina.ai/http://enka.network/api/uid/${clean}/`,
         signal,
-        { cacheKey: `enka:uid-reader:${clean}`, ttlMs: 10 * 60 * 1000, staleOnError: true },
+        { cacheKey: `enka:uid-reader:${clean}`, ttlMs: 10 * 60 * 1000, staleOnError: true, forceRefresh },
       );
       return validateProfile(parseReaderPayload(reader));
     } catch {
@@ -60,15 +60,24 @@ export async function fetchEnkaByUid(uid: string, signal?: AbortSignal): Promise
   }
 }
 
-export async function fetchEnkaMetadata(signal?: AbortSignal): Promise<EnkaMetadata> {
+export async function fetchEnkaMetadata(signal?: AbortSignal, forceRefresh = false): Promise<EnkaMetadata> {
   const base = 'https://raw.githubusercontent.com/EnkaNetwork/API-docs/master/store';
-  const options = { ttlMs: 24 * 60 * 60 * 1000, staleOnError: true };
+  const options = { ttlMs: 24 * 60 * 60 * 1000, staleOnError: true, forceRefresh };
   const requestSignal = signal ?? AbortSignal.timeout(20_000);
-  const [characters, localization, namecards, profilePictures] = await Promise.all([
-    getJson<EnkaMetadata['characters']>(`${base}/characters.json`, requestSignal, { ...options, cacheKey: 'enka:characters:v1' }),
-    getJson<Record<string, Record<string, string>>>(`${base}/loc.json`, requestSignal, { ...options, cacheKey: 'enka:localization:v1' }),
-    getJson<NonNullable<EnkaMetadata['namecards']>>(`${base}/namecards.json`, requestSignal, { ...options, cacheKey: 'enka:namecards:v1' }).catch(() => ({})),
-    getJson<NonNullable<EnkaMetadata['profilePictures']>>(`${base}/pfps.json`, requestSignal, { ...options, cacheKey: 'enka:pfps:v1' }).catch(() => ({})),
+  const load = <T,>(file: string) => getJson<T>(`${base}/${file}.json`, requestSignal, { ...options, cacheKey: `enka:metadata:v2:${file}` });
+  const [characters, localization, legacyLocalization, namecards, profilePictures, weapons, relics, curves, relicLevels, affixes] = await Promise.all([
+    load<EnkaMetadata['characters']>('gi/avatars').catch(() => load<EnkaMetadata['characters']>('characters')),
+    load<Record<string, Record<string, string>>>('gi/locs').catch(() => load<Record<string, Record<string, string>>>('loc')),
+    // The current catalog uses set names, while older snapshots can still
+    // contain hashes for individual artifact-piece names.
+    load<Record<string, Record<string, string>>>('loc').catch(() => ({})),
+    load<NonNullable<EnkaMetadata['namecards']>>('gi/namecards').catch(() => load<NonNullable<EnkaMetadata['namecards']>>('namecards')).catch(() => ({})),
+    load<NonNullable<EnkaMetadata['profilePictures']>>('gi/pfps').catch(() => load<NonNullable<EnkaMetadata['profilePictures']>>('pfps')).catch(() => ({})),
+    load<NonNullable<EnkaMetadata['weapons']>>('gi/weapons').catch(() => ({})),
+    load<NonNullable<EnkaMetadata['relics']>>('gi/relics').catch(() => ({})),
+    load<NonNullable<EnkaMetadata['curves']>>('gi/curves').catch(() => ({})),
+    load<NonNullable<EnkaMetadata['relicLevels']>>('gi/relic_levels').catch(() => ({})),
+    load<NonNullable<EnkaMetadata['affixes']>>('gi/affixes').catch(() => ({})),
   ]);
-  return { characters, text: localization.en ?? {}, namecards, profilePictures };
+  return { characters, text: { ...('en' in legacyLocalization ? legacyLocalization.en : {}), ...(localization.en ?? {}) }, namecards, profilePictures, weapons, relics, curves, relicLevels, affixes };
 }

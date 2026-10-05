@@ -38,12 +38,12 @@ async function fetchWithRetry(url: string, signal: AbortSignal | undefined, acce
   throw lastError instanceof Error ? lastError : new Error('Request failed.');
 }
 
-export async function getJson<T>(url: string, signal?: AbortSignal, options?: { cacheKey?: string; ttlMs?: number; staleOnError?: boolean }): Promise<T> {
+export async function getJson<T>(url: string, signal?: AbortSignal, options?: { cacheKey?: string; ttlMs?: number; staleOnError?: boolean; forceRefresh?: boolean }): Promise<T> {
   const cacheKey = options?.cacheKey ?? url;
   const ttlMs = options?.ttlMs ?? 30 * 60 * 1000;
   const shareRequest = !signal;
   const cached = readCache<T>(cacheKey);
-  if (cached && !cached.stale) return cached.value;
+  if (cached && !cached.stale && !options?.forceRefresh) return cached.value;
 
   // A caller-owned signal must never cancel a request another screen is
   // awaiting. Only share signal-free requests; page requests stay isolated.
