@@ -11,7 +11,7 @@ export function CharacterCard({ character, selected = false, onSelect }: { chara
   const content = <>
     <div className="character-card__image-wrap">
       <AsyncImage src={imageSources} alt={character.name} className="character-card__image" assetKey={assetKey('characters', character.id || character.name)} />
-      <span className={`element-chip ${elementClass(character.element)}`}>{elementImageSources(character.element).length > 0 && <img src={elementImageSources(character.element)[0]} alt="" />}{character.element ?? '?'}</span>
+      <span className={`element-chip ${elementClass(character.element)}`}>{elementImageSources(character.element).length > 0 && <AsyncImage src={elementImageSources(character.element)} alt="" fallback={null} />}{character.element ?? '?'}</span>
     </div>
     <div className="character-card__body">
       <div className="eyebrow">{character.weapon ?? 'Weapon'} · {character.region ?? 'Teyvat'}</div>

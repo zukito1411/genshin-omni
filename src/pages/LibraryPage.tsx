@@ -1,9 +1,11 @@
 import { useEffect, useMemo, useState } from 'react';
 import { ExternalLink, X } from 'lucide-react';
 import { fetchEntity, fetchFolderEntities, fetchStats } from '../api/genshinDb';
-import { assetKey, entityImageSources, genshinBuildsMaterialImage } from '../api/genshinDev';
+import { assetKey, entityImageSources } from '../api/genshinDev';
 import { SectionTitle } from '../components/SectionTitle';
 import { AsyncImage } from '../components/AsyncImage';
+import { MaterialIcon } from '../components/MaterialIcon';
+import { ArtifactPieces } from '../components/ArtifactPieces';
 import { usePaimonContext } from '../components/PaimonCompanion';
 import { extractMaterials, formatValue } from '../utils/genshin';
 import type { LibraryEntity } from '../types/genshin';
@@ -136,16 +138,7 @@ function MaterialImage({
   entity?: LibraryEntity;
 }) {
   return (
-    <AsyncImage
-      src={[
-        genshinBuildsMaterialImage(name),
-        ...(entity ? entityImageSources('materials', entity) : []),
-      ]}
-      alt=""
-      className="material-icon"
-      fallback="N/A"
-      assetKey={assetKey('materials', name)}
-    />
+    <MaterialIcon name={name} entity={entity} />
   );
 }
 
@@ -467,7 +460,7 @@ export function LibraryPage({
         <div className="entity-grid">
           {filtered.map((item) => (
             <button
-              className="entity-card"
+              className={`entity-card rarity-${item.rarity ?? 0}`}
               key={item.id || item.name}
               onClick={() => open(item)}
             >
@@ -720,6 +713,8 @@ export function LibraryPage({
                     {selected.fourPieceBonus}
                   </p>
                 )}
+
+                <ArtifactPieces entity={selected} />
 
                 {!selected.twoPieceBonus &&
                   !selected.fourPieceBonus && (

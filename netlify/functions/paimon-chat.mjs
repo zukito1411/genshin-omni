@@ -17,6 +17,7 @@ const allowedPages = new Set([
   'materials',
   'compare',
   'account',
+  'profile',
   'map',
   'guides',
   'sources',

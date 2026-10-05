@@ -1,6 +1,6 @@
-import { NavLink, Outlet, useNavigate } from 'react-router-dom';
+import { Link, NavLink, Outlet, useLocation, useNavigate } from 'react-router-dom';
 import { ArrowLeftRight, BookOpen, Boxes, Compass, Eye, EyeOff, Home, ListChecks, Map, Search, Shield, Swords, UserRound, Users } from 'lucide-react';
-import { useMemo, useState, type FormEvent, type KeyboardEvent } from 'react';
+import { useEffect, useMemo, useRef, useState, type FormEvent, type KeyboardEvent } from 'react';
 import { useCharacters } from '../hooks/useCharacters';
 import { clearAppCache } from '../api/cache';
 import { usePaimonContext } from './PaimonCompanion';
@@ -14,6 +14,7 @@ const nav = [
   { to: '/materials', label: 'Farming Plan', icon: ListChecks },
   { to: '/compare', label: 'Compare', icon: ArrowLeftRight },
   { to: '/account', label: 'My Roster', icon: UserRound },
+  { to: '/profile', label: 'UID Search', icon: Search },
   { to: '/map', label: 'Interactive Map', icon: Map },
   { to: '/guides', label: 'Guides / FAQ', icon: BookOpen },
 ];
@@ -23,8 +24,20 @@ export function AppShell() {
   const [openSearch, setOpenSearch] = useState(false);
   const [activeMatch, setActiveMatch] = useState(0);
   const navigate = useNavigate();
+  const { pathname } = useLocation();
+  const navRef = useRef<HTMLElement>(null);
   const { allCharacters } = useCharacters('');
   const { shown, setShown } = usePaimonContext();
+
+  useEffect(() => {
+    if (window.matchMedia('(max-width: 900px)').matches) {
+      const active = navRef.current?.querySelector<HTMLElement>('.active');
+      if (active && navRef.current) {
+        // Scroll only the horizontal nav, preserving the document's position.
+        navRef.current.scrollLeft = Math.max(0, active.offsetLeft - navRef.current.offsetLeft - 12);
+      }
+    }
+  }, [pathname]);
 
   const matches = useMemo(() => {
     const search = query.trim().toLowerCase();
@@ -113,7 +126,7 @@ export function AppShell() {
   return (
     <div className="app-shell">
       <aside className="sidebar">
-        <div className="brand">
+        <Link className="brand" to="/" aria-label="Teyvat Atlas home">
           <div className="brand-mark">
             <img
               src="/assets/logo.png"
@@ -125,9 +138,9 @@ export function AppShell() {
             <strong>Teyvat Atlas</strong>
             <span>Genshin player library</span>
           </div>
-        </div>
+        </Link>
 
-        <nav className="sidebar-nav">
+        <nav className="sidebar-nav" aria-label="Main navigation" ref={navRef}>
           {nav.map(({ to, label, icon: Icon }) => (
             <NavLink
               key={to}

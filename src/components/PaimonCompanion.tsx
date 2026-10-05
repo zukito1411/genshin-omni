@@ -9,6 +9,7 @@ import {
   type ReactNode,
 } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
+import { PaimonLauncher } from './PaimonLauncher';
 
 type PaimonAction =
   | 'idle'
@@ -34,6 +35,7 @@ export type PaimonPage =
   | 'materials'
   | 'compare'
   | 'account'
+  | 'profile'
   | 'map'
   | 'guides'
   | 'sources';
@@ -71,6 +73,7 @@ function getPageFromPath(pathname: string): PaimonPage {
   if (pathname === '/materials') return 'materials';
   if (pathname === '/compare') return 'compare';
   if (pathname === '/account') return 'account';
+  if (pathname.startsWith('/profile')) return 'profile';
   if (pathname === '/map') return 'map';
   if (pathname === '/guides') return 'guides';
   if (pathname === '/sources') return 'sources';
@@ -226,7 +229,10 @@ function getPaimonHelpReply(question: string, page: PaimonPage, name?: string): 
   if (/compare|versus| vs |better/.test(query)) {
     return { text: 'The comparison tool puts progression and sourced build guidance side by side.', route: '/compare', actionLabel: 'Compare Characters' };
   }
-  if (/roster|own|owned|uid|account|showcase/.test(query)) {
+  if (/uid|showcase|profile/.test(query)) {
+    return { text: 'Search a UID, then choose a public showcase character to see their equipped stats, weapons, and artifacts.', route: '/profile', actionLabel: 'Open UID Search' };
+  }
+  if (/roster|own|owned|account/.test(query)) {
     return { text: 'You can mark your roster locally, or look up the public characters a UID has chosen to showcase.', route: '/account', actionLabel: 'Open My Roster' };
   }
   if (/weapon|artifact|build|talent|constellation/.test(query)) {
@@ -240,6 +246,7 @@ function getPaimonHelpReply(question: string, page: PaimonPage, name?: string): 
   if (page === 'teams') return { text: 'Give each teammate the role you intend them to perform. The advisor then checks coverage and possible reactions without guessing your builds.' };
   if (page === 'compare') return { text: 'Choose a character on each side. Paimon will line up progression and current sourced build guidance.' };
   if (page === 'account') return { text: 'Your local roster stays in this browser. A UID can only show the account’s public Enka showcase.' };
+  if (page === 'profile') return { text: 'Search a UID, then select a showcase character to inspect their build. The player needs to enable public character details in-game.' };
   return { text: 'Ask Paimon about materials, teams, comparisons, your roster, builds, or exploration!' };
 }
 
@@ -441,6 +448,8 @@ export function PaimonCompanion() {
           'Which characters do you have?',
           'A public showcase only shows what its player shares.',
         ];
+      case 'profile':
+        return ['Let’s see those equipped builds!', 'Choose a showcase character to check their artifacts.', 'Paimon can help you read those stats!'];
       case 'guides':
         return [
           'Paimon hopes this guide helps!',
@@ -540,6 +549,7 @@ export function PaimonCompanion() {
         'A public UID showcase does not reveal a player’s whole roster.',
         'Paimon keeps local roster choices in this browser.',
       ],
+      profile: ['A public showcase includes the shared characters’ equipped builds.', 'Artifacts have one main stat and up to four substats.'],
       map: [],
       guides: [
         'Character builds can depend on more than one stat.',
@@ -1077,6 +1087,8 @@ export function PaimonCompanion() {
 
     const controller = new AbortController();
     helperAbortRef.current = controller;
+    let timedOut = false;
+    const timeout = window.setTimeout(() => { timedOut = true; controller.abort(); }, 18_000);
     setHelperQuestion(question);
     setHelperStatus('thinking');
     showHelperReply({ text: 'Paimon is thinking...', source: 'ai' });
@@ -1103,10 +1115,11 @@ export function PaimonCompanion() {
       setHelperStatus('ai');
       showHelperReply({ ...fallbackReply, text: reply, source: 'ai' });
     } catch {
-      if (controller.signal.aborted || helperRequestRef.current !== requestId) return;
+      if ((!timedOut && controller.signal.aborted) || helperRequestRef.current !== requestId) return;
       setHelperStatus('native');
       showHelperReply({ ...fallbackReply, source: 'native' });
     } finally {
+      window.clearTimeout(timeout);
       if (helperRequestRef.current === requestId) {
         helperAbortRef.current = null;
       }
@@ -1436,18 +1449,7 @@ export function PaimonCompanion() {
       </button>
       </div>}
 
-      <button
-        type="button"
-        className="paimon-launcher"
-        data-paimon-help
-        onClick={openHelper}
-        aria-label="Open Paimon helper"
-        aria-expanded={helperOpen}
-        aria-controls="paimon-helper"
-      >
-        <span className="paimon-launcher__face" aria-hidden="true" />
-        <span className="paimon-launcher__label">Ask Paimon</span>
-      </button>
+      <PaimonLauncher onOpen={openHelper} open={helperOpen} />
 
       {helperOpen && <aside id="paimon-helper" className="paimon-helper" data-paimon-help aria-label="Paimon helper">
         <div className="paimon-helper__heading"><div><div className="eyebrow">PAIMON HELPER</div><strong>What are we doing?</strong></div><button type="button" data-paimon-help onClick={() => setHelperOpen(false)} aria-label="Close Paimon helper">×</button></div>
@@ -1460,7 +1462,7 @@ export function PaimonCompanion() {
         ].map(([label, question]) => <button type="button" key={label} data-paimon-help onClick={() => void askPaimon(question)}>{label}</button>)}</div>
         <form data-paimon-help onSubmit={(event) => { event.preventDefault(); void askPaimon(helperQuestion || 'help'); }}>
           <label htmlFor="paimon-helper-question">Ask Paimon</label>
-          <div><input id="paimon-helper-question" value={helperQuestion} onChange={(event) => setHelperQuestion(event.target.value)} placeholder="Materials, teams, roster…" /><button type="submit">Ask</button></div>
+          <div><input id="paimon-helper-question" value={helperQuestion} onChange={(event) => setHelperQuestion(event.target.value)} placeholder="Materials, teams, roster…" maxLength={600} /><button type="submit" disabled={helperStatus === 'thinking'}>{helperStatus === 'thinking' ? 'Thinking…' : 'Ask'}</button></div>
         </form>
         {helperReply?.route && <button type="button" className="button primary paimon-helper__action" data-paimon-help onClick={useHelperAction}>{helperReply.actionLabel ?? 'Open tool'}</button>}
         <small>{helperStatus === 'thinking' ? 'Asking AI Paimon…' : helperReply?.source === 'ai' ? 'AI Paimon is answering. Your message was sent to the configured AI provider.' : 'Built-in Paimon is answering. AI is unavailable or has not been configured.'}</small>

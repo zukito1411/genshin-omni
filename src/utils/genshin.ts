@@ -19,7 +19,7 @@ export function extractTalents(raw: Record<string, unknown>): TalentEntry[] {
       name: name ?? '',
       type: firstString(obj.unlock, obj.type, obj.levelType, obj.kind),
       description,
-      icon: firstString(obj.icon, asRecord(obj.images).icon),
+      icon: firstString(obj.icon, asRecord(obj.images).filename_icon, asRecord(obj.images).icon),
       level: Number(obj.level ?? index + 1) || index + 1,
       raw: obj,
     } satisfies TalentEntry;
@@ -37,7 +37,7 @@ export function extractConstellations(raw: Record<string, unknown>): Constellati
       name: name ?? '',
       description,
       level: Number(obj.level ?? index + 1) || index + 1,
-      icon: firstString(obj.icon, asRecord(obj.images).icon),
+      icon: firstString(obj.icon, asRecord(obj.images).filename_icon, asRecord(obj.images).icon),
     } satisfies ConstellationEntry;
   }).filter((entry) => entry.name && entry.description && entry.level && entry.level <= 6)
     .sort((a, b) => (a.level ?? 0) - (b.level ?? 0));

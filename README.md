@@ -7,6 +7,7 @@ Teyvat Atlas is a player-first Genshin Impact companion built as a **React + Typ
 - **GenshinDB API** — live character roster and structured game data.
 - **genshin.dev** — public entity data and image endpoints used as a fallback.
 - **Enka.Network / Hakush / Project Amber** — public game UI asset CDNs used when exact image filenames are available.
+- **PathOfGenshin resources** — optional GitHub fallback for older game UI artwork; game assets belong to HoYoverse.
 - **Genshin.gg** — current public player build reference.
 - **Genshin Builds** — secondary public player build reference.
 - **Genshin Build** — additional public build reference used when primary build sources do not provide enough data.
@@ -68,3 +69,31 @@ missing, unavailable, or returns an error, Paimon automatically uses the
 built-in browser guide instead.
 
 Render is configured as a static site, so it does not host this function.
+
+## Player profiles and builds
+
+`/profile` is the UID search page. Open a public profile at `/profile/<uid>`,
+then select a showcase character to see combat attributes, equipment,
+artifact main/substats, talents, and constellations. Character build links
+can be bookmarked and refreshed. Enka exposes only the player's public
+showcase, and the details reflect the last available snapshot.
+
+Profiles also show the public avatar, equipped namecard background, featured
+namecards, achievement total, and Abyss floor/chamber record when supplied.
+Public UID data does not reveal individual achievement unlocks, a complete
+owned roster, or detailed Abyss/Theater histories; missing fields remain unavailable.
+Artwork uses exact filenames from provider metadata with independent image
+fallbacks and decorative placeholders when no image can be downloaded.
+
+On touch devices and screens up to 700px wide, hold the Paimon bubble briefly and drag it.
+Releasing docks it halfway against the nearest edge and remembers the position
+on this device. A tap opens the helper.
+
+## Browser checks
+
+```bash
+npm run test:e2e
+```
+
+The Playwright checks use installed Google Chrome and mocked public-provider
+responses, so the checks do not require an AI key or consume provider credits.

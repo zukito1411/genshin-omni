@@ -2,10 +2,14 @@ import { useEffect, useMemo, useState } from 'react';
 import { Link, useParams, useSearchParams } from 'react-router-dom';
 import { Check, ExternalLink, Sparkles, Swords } from 'lucide-react';
 import { fetchAggregatedCharacter } from '../api/aggregator';
-import { assetKey, characterImageSources, elementImageSources, entityImageSources, fetchGenshinBuildsAssetMap, findGenshinBuildsAsset, genshinBuildsMaterialImage } from '../api/genshinDev';
+import { assetKey, characterImageSources, elementImageSources, entityImageSources, fetchGenshinBuildsAssetMap, findGenshinBuildsAsset } from '../api/genshinDev';
 import { fetchCharacter, fetchEntity, fetchStats } from '../api/genshinDb';
 import { fetchPlayerGuide, type LivePlayerGuide } from '../api/playerGuide';
 import { AsyncImage } from '../components/AsyncImage';
+import { MaterialIcon } from '../components/MaterialIcon';
+import { ArtifactPieces } from '../components/ArtifactPieces';
+import { gameImageSources } from '../api/assets';
+import { AssetPlaceholder } from '../components/AssetPlaceholder';
 import { usePaimonContext } from '../components/PaimonCompanion';
 import { SectionTitle } from '../components/SectionTitle';
 import { useCharacters } from '../hooks/useCharacters';
@@ -23,6 +27,7 @@ const links = (name: string) => {
 };
 
 const TRAVELER_ELEMENTS = ['Anemo', 'Geo', 'Electro', 'Dendro', 'Hydro', 'Pyro', 'Cryo'] as const;
+const abilityImageSources = (icon?: string) => [...gameImageSources(icon), ...(icon && /^https?:\/\//i.test(icon) ? [icon] : [])];
 type TravelerElement = (typeof TRAVELER_ELEMENTS)[number];
 
 function travelerElementFrom(value: string | null): TravelerElement {
@@ -53,12 +58,13 @@ function combinedLists(keys: string[], ...values: unknown[]): unknown[] {
     // Some provider versions key the six constellation records (or talents)
     // by ID rather than returning an array. Accept that shape only when each
     // value is a real, described entry—not arbitrary response metadata.
-    const entries = Object.values(record).filter((entry) => {
+    const entries = Object.entries(record).filter(([, entry]) => {
       if (!entry || typeof entry !== 'object' || Array.isArray(entry)) return false;
       const item = entry as Record<string, unknown>;
       return typeof item.name === 'string' && typeof (item.description ?? item.desc ?? item.effect) === 'string';
     });
-    return entries;
+    const images = record.images && typeof record.images === 'object' ? record.images as Record<string, unknown> : {};
+    return entries.map(([key, entry]) => ({ ...entry as Record<string, unknown>, icon: images[`filename_${key}`] ?? images[key] ?? (entry as Record<string, unknown>).icon }));
   });
 }
 
@@ -111,7 +117,7 @@ function RecommendationCard({ title, badge, note, imageSources, onClick, folder 
 }
 
 function MaterialImage({ name, entity }: { name: string; entity?: LibraryEntity }) {
-  return <AsyncImage src={[genshinBuildsMaterialImage(name), ...(entity ? entityImageSources('materials', entity) : [])]} alt="" className="material-icon" fallback="N/A" assetKey={assetKey('materials', name)} />;
+  return <MaterialIcon name={name} entity={entity} />;
 }
 
 function formatAscensionBonus(value: unknown, label: string): string {
@@ -507,9 +513,9 @@ export function CharacterPage() {
       </section>
     </div>}
 
-    {tab === 'skills' && <section className="panel player-panel"><SectionTitle eyebrow="TALENTS" title="Skills & abilities" description="Understand what each part of the kit does before investing resources." />{talents.length ? <div className="talent-detail-grid">{talents.map((talent, index) => <article className="talent-detail" key={`${talent.name}-${index}`}><div className="talent-index">{index + 1}</div><div><div className="eyebrow">{talent.type ?? 'Talent'}</div><h3>{talent.name}</h3><p>{talent.description ?? 'Loading description!'}</p></div></article>)}</div> : <div className="empty-state">{gameDataLoading ? 'Loading verified skill descriptions!' : 'Skill descriptions are being refreshed from the game-data source.'}</div>}</section>}
+    {tab === 'skills' && <section className="panel player-panel"><SectionTitle eyebrow="TALENTS" title="Skills & abilities" description="Understand what each part of the kit does before investing resources." />{talents.length ? <div className="talent-detail-grid">{talents.map((talent, index) => <article className="talent-detail" key={`${talent.name}-${index}`}><AsyncImage className="talent-index ability-icon" src={abilityImageSources(talent.icon)} alt="" assetKey={`talents:${character.id}:${talent.name}`} fallback={<AssetPlaceholder kind="talent" />} /><div><div className="eyebrow">{talent.type ?? 'Talent'}</div><h3>{talent.name}</h3><p>{talent.description ?? 'Loading description!'}</p></div></article>)}</div> : <div className="empty-state">{gameDataLoading ? 'Loading verified skill descriptions!' : 'Skill descriptions are being refreshed from the game-data source.'}</div>}</section>}
 
-    {tab === 'constellations' && <section className="panel player-panel"><SectionTitle eyebrow="CONSTELLATIONS" title="Constellations" description="See what changes at each constellation level before deciding whether you want to invest further." />{constellations.length ? <div className="constellation-list">{constellations.map((entry, index) => <article className="constellation-row" key={`${entry.name}-${index}`}><div className="constellation-number">C{entry.level ?? index + 1}</div><div><h3>{entry.name}</h3><p>{entry.description ?? 'Loading description!'}</p></div></article>)}</div> : <div className="empty-state">{gameDataLoading ? 'Loading verified constellation descriptions!' : 'Constellation descriptions are being refreshed from the game-data source.'}</div>}</section>}
+    {tab === 'constellations' && <section className="panel player-panel"><SectionTitle eyebrow="CONSTELLATIONS" title="Constellations" description="See what changes at each constellation level before deciding whether you want to invest further." />{constellations.length ? <div className="constellation-list">{constellations.map((entry, index) => <article className="constellation-row" key={`${entry.name}-${index}`}><div className="constellation-marker"><AsyncImage className="ability-icon" src={abilityImageSources(entry.icon)} alt="" assetKey={`constellations:${character.id}:${entry.name}`} fallback={<AssetPlaceholder kind="talent" />} /><span>C{entry.level ?? index + 1}</span></div><div><h3>{entry.name}</h3><p>{entry.description ?? 'Loading description!'}</p></div></article>)}</div> : <div className="empty-state">{gameDataLoading ? 'Loading verified constellation descriptions!' : 'Constellation descriptions are being refreshed from the game-data source.'}</div>}</section>}
 
     {tab === 'materials' && <section className="panel player-panel"><SectionTitle eyebrow="LEVELING MATERIALS" title={`${displayName} leveling materials`} description="Materials required to raise this character." />{materials.length ? <div className="material-table">{materials.map((material, index) => <div className="material-row player-material-row" key={`${material.name}-${index}`}><MaterialImage name={material.name} entity={materialEntities[material.name]} /><span><strong>{material.name}</strong>{material.category && <small>{material.category}</small>}</span><strong>{material.amount ?? '—'}</strong></div>)}</div> : <div className="player-empty"><div><strong>No material list was returned.</strong><p>The live source does not currently expose material requirements for this character.</p></div></div>}</section>}
 
@@ -557,6 +563,7 @@ export function CharacterPage() {
           {selectedRecommendation.effectName && <h3>{selectedRecommendation.effectName}</h3>}
           {selectedRecommendation.twoPieceBonus && <p><strong>2-piece:</strong> {selectedRecommendation.twoPieceBonus}</p>}
           {selectedRecommendation.fourPieceBonus && <p><strong>4-piece:</strong> {selectedRecommendation.fourPieceBonus}</p>}
+          <ArtifactPieces entity={selectedRecommendation} />
           {!selectedRecommendation.twoPieceBonus && !selectedRecommendation.fourPieceBonus && <p>{selectedRecommendation.description ?? 'No additional information was returned.'}</p>}
         </>}
       </aside>

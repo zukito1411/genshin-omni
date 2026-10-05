@@ -1,6 +1,7 @@
 import { getJson, getText } from './http';
 import { slugify } from '../utils/normalize';
 import type { GenshinCharacter, LibraryEntity } from '../types/genshin';
+import { gameImageSources } from './assets';
 
 const BASE_URL = 'https://genshin.jmp.blue';
 const ENKA_UI = 'https://enka.network/ui/';
@@ -31,6 +32,7 @@ function cdnCandidates(filename?: string, assetType: 'characters' | 'weapons' | 
   const file = withExtension(filename, '.png');
   const mihoyoFolder = assetType === 'characters' ? 'character_icon' : 'equip';
   return unique([
+    ...gameImageSources(filename),
     `${AMBR_UI}${encodeURIComponent(file)}`,
     `${YATTA_UI}${encodeURIComponent(withExtension(filename, '.png'))}`,
     `${HAKUSH_UI}${encodeURIComponent(withExtension(filename, '.webp'))}`,
@@ -192,6 +194,7 @@ export function characterImageSources(character: Pick<GenshinCharacter, 'id' | '
 
   return unique([
     ...(isTraveler ? [TRAVELER_BUILD_IMAGE, TRAVELER_COMBINED_IMAGE] : []),
+    ...filenames.flatMap((filename) => cdnCandidates(filename, 'characters')),
     genshinBuildsImage('characters', character.name || character.id),
     ...raw.flatMap(directImage),
     ...genshinTypes.map((imageType) => entityImage('characters', character.name || character.id, imageType)),
@@ -213,6 +216,7 @@ export function characterImages(nameOrId: string) {
 export function entityImageSources(type: string, entity: Pick<LibraryEntity, 'name' | 'icon' | 'raw'>, kind: 'icon' = 'icon'): string[] {
   const raw = asRecord(entity.raw);
   const rawValues = [
+    entity.icon,
     raw.icon, raw.iconPath, raw.nameicon, raw.nameIcon, raw.nameIconCard, raw.awakenIcon,
     ...Object.values(asRecord(raw.images)),
   ];
@@ -227,12 +231,27 @@ export function entityImageSources(type: string, entity: Pick<LibraryEntity, 'na
     : type === 'weapons' ? [entityImage(type, entity.name, kind)] : [];
 
   return unique([
+    ...filenameCandidates.flatMap((filename) => cdnCandidates(filename, type as 'characters' | 'weapons' | 'artifacts' | 'materials')),
     ...directImage(entity.icon),
     ...(type === 'weapons' || type === 'artifacts' ? [genshinBuildsImage(type, entity.name)] : []),
     ...rawImages,
     ...entityImages,
     ...filenameCandidates.flatMap((filename) => cdnCandidates(filename, type as 'characters' | 'weapons' | 'artifacts' | 'materials')),
     ...entityIconCdnSources(type, entity.name),
+  ]);
+}
+
+export function materialImageSources(name: string, entity?: LibraryEntity, icon?: string): string[] {
+  const currencies: Record<string, string> = {
+    mora: 'UI_ItemIcon_202', "hero's wit": 'UI_ItemIcon_104003',
+    "adventurer's experience": 'UI_ItemIcon_104002', "wanderer's advice": 'UI_ItemIcon_104001',
+    'crown of insight': 'UI_ItemIcon_104319',
+  };
+  return unique([
+    ...gameImageSources(icon), ...directImage(icon),
+    ...(entity ? entityImageSources('materials', entity) : []),
+    ...gameImageSources(currencies[name.toLowerCase().replace(/[’]/g, "'")]),
+    genshinBuildsMaterialImage(name),
   ]);
 }
 

@@ -1,6 +1,9 @@
 import { useMemo, useState } from 'react';
 import { CalendarDays, Check, ListFilter } from 'lucide-react';
 import { SectionTitle } from '../components/SectionTitle';
+import { AsyncImage } from '../components/AsyncImage';
+import { MaterialIcon } from '../components/MaterialIcon';
+import { assetKey, characterImageSources } from '../api/genshinDev';
 import { useCharacters } from '../hooks/useCharacters';
 import { fetchEntity } from '../api/genshinDb';
 import { fetchAggregatedCharacter } from '../api/aggregator';
@@ -10,7 +13,7 @@ import type { AggregatedCharacter, GenshinCharacter, LibraryEntity, MaterialRef 
 
 const KEY = 'teyvat-atlas:material-selection';
 const WEEKDAYS = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
-type PlanMaterial = MaterialRef & { availability: string[] };
+type PlanMaterial = MaterialRef & { availability: string[]; entity?: LibraryEntity };
 type Filter = 'all' | 'today' | 'remaining' | 'done';
 
 function readIds(): string[] {
@@ -30,11 +33,14 @@ function extractAvailability(entity: LibraryEntity): string[] {
     .filter((value): value is string => Boolean(value)))];
 }
 
-async function loadAvailability(names: string[]): Promise<Record<string, string[]>> {
-  const result: Record<string, string[]> = {};
+async function loadAvailability(names: string[]): Promise<Record<string, { availability: string[]; entity?: LibraryEntity }>> {
+  const result: Record<string, { availability: string[]; entity?: LibraryEntity }> = {};
   for (let offset = 0; offset < names.length; offset += 6) {
     const batch = await Promise.all(names.slice(offset, offset + 6).map(async (name) => {
-      try { return [name, extractAvailability(await fetchEntity('materials', name))] as const; } catch { return [name, []] as const; }
+      try {
+        const entity = await fetchEntity('materials', name);
+        return [name, { availability: extractAvailability(entity), entity }] as const;
+      } catch { return [name, { availability: [] }] as const; }
     }));
     Object.assign(result, Object.fromEntries(batch));
   }
@@ -52,11 +58,16 @@ function materialPayload(character: AggregatedCharacter): Record<string, unknown
   const dev = character.secondary.dev && typeof character.secondary.dev === 'object'
     ? character.secondary.dev as Record<string, unknown>
     : {};
+  const { costs: rawCosts, ascension_materials: rawAscension, ...rawDetails } = raw;
+  const { costs: devCosts, ascension_materials: devAscension, ...devDetails } = dev;
+  const costs = hasValues(rawCosts) ? rawCosts : devCosts;
+  const ascension = hasValues(rawAscension) ? rawAscension : devAscension;
+  // Both providers describe the same ascensions. Keep one source of costs,
+  // otherwise a successful fallback enrichment doubles the checklist totals.
   return {
-    ...raw,
-    ...dev,
-    costs: hasValues(raw.costs) ? raw.costs : dev.costs,
-    ascension_materials: hasValues(raw.ascension_materials) ? raw.ascension_materials : dev.ascension_materials,
+    ...rawDetails,
+    ...devDetails,
+    ...(hasValues(costs) ? { costs } : { ascension_materials: ascension }),
   };
 }
 
@@ -114,7 +125,7 @@ export function MaterialsPage() {
       setMaterials(initial);
       setChecked(readMaterialChecks(planKey));
       const availability = await loadAvailability([...total.keys()]);
-      setMaterials((current) => current.map((item) => ({ ...item, availability: availability[item.name] ?? [] })));
+      setMaterials((current) => current.map((item) => ({ ...item, ...availability[item.name] })));
     } catch (reason) {
       setMaterials([]);
       setError(reason instanceof Error ? reason.message : 'Unable to build this material checklist.');
@@ -135,10 +146,10 @@ export function MaterialsPage() {
     <div className="planner-layout">
       <section className="panel"><div className="toolbar"><input className="search-input" value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Search characters" /></div>
         {selectedCharacters.length > 0 && <div className="selected-character-list">{selectedCharacters.map((character) => <button key={character.id} type="button" onClick={() => toggleCharacter(character.id)} disabled={busy}>{character.name} ×</button>)}</div>}
-        {loading ? <div className="loading">Loading roster…</div> : <div className="material-character-list">{visible.map((character) => <label key={character.id} className={`material-character ${selectedIds.includes(character.id) ? 'selected' : ''}`}><input type="checkbox" checked={selectedIds.includes(character.id)} onChange={() => toggleCharacter(character.id)} disabled={busy} /><span>{character.name}</span><small>{character.element}</small></label>)}</div>}
+        {loading ? <div className="loading">Loading roster…</div> : <div className="material-character-list">{visible.map((character) => <label key={character.id} className={`material-character ${selectedIds.includes(character.id) ? 'selected' : ''}`}><input type="checkbox" checked={selectedIds.includes(character.id)} onChange={() => toggleCharacter(character.id)} disabled={busy} /><AsyncImage src={characterImageSources(character, 'icon')} alt="" className="planner-character-icon" assetKey={assetKey('characters', character.id)} /><span>{character.name}</span><small>{character.element}</small></label>)}</div>}
       </section>
       <section className="panel plan-output"><div className="plan-output-head"><div><div className="eyebrow">SELECTED</div><h3>{selectedCharacters.length} characters</h3></div><button className="button primary" onClick={buildPlan} disabled={!selectedCharacters.length || busy}>{busy ? 'Building checklist…' : 'Build checklist'}</button></div>
-        {materials.length > 0 && <><div className="planner-progress"><Check size={15} /><span>{completedCount} of {materials.length} materials checked</span></div><div className="planner-filters" aria-label="Material checklist filters"><button className={filter === 'all' ? 'active' : ''} type="button" onClick={() => setFilter('all')}><ListFilter size={14} /> All</button><button className={filter === 'today' ? 'active' : ''} type="button" onClick={() => setFilter('today')}><CalendarDays size={14} /> {today}</button><button className={filter === 'remaining' ? 'active' : ''} type="button" onClick={() => setFilter('remaining')}>Remaining</button><button className={filter === 'done' ? 'active' : ''} type="button" onClick={() => setFilter('done')}>Done</button></div>{filter === 'today' && <p className="muted planner-note">Items without provider-supplied availability are intentionally omitted from the daily view.</p>}<div className="material-table">{filteredMaterials.map((item) => <label className={`material-row ${checked.includes(item.name) ? 'checked' : ''}`} key={item.name}><input type="checkbox" checked={checked.includes(item.name)} onChange={() => toggleMaterial(item.name)} /><span><strong>{item.name}</strong>{item.availability.length > 0 && <small>{item.availability.join(', ')}</small>}</span><strong>{item.amount ?? '—'}</strong><em>{item.category ?? ''}</em></label>)}</div>{!filteredMaterials.length && <div className="empty-state">No material in this plan matches the selected view.</div>}</>}
+        {materials.length > 0 && <><div className="planner-progress"><Check size={15} /><span>{completedCount} of {materials.length} materials checked</span></div><div className="planner-filters" aria-label="Material checklist filters"><button className={filter === 'all' ? 'active' : ''} type="button" onClick={() => setFilter('all')}><ListFilter size={14} /> All</button><button className={filter === 'today' ? 'active' : ''} type="button" onClick={() => setFilter('today')}><CalendarDays size={14} /> {today}</button><button className={filter === 'remaining' ? 'active' : ''} type="button" onClick={() => setFilter('remaining')}>Remaining</button><button className={filter === 'done' ? 'active' : ''} type="button" onClick={() => setFilter('done')}>Done</button></div>{filter === 'today' && <p className="muted planner-note">Items without provider-supplied availability are intentionally omitted from the daily view.</p>}<div className="material-table">{filteredMaterials.map((item) => <label className={`material-row farming-material-row ${checked.includes(item.name) ? 'checked' : ''}`} key={item.name}><input type="checkbox" checked={checked.includes(item.name)} onChange={() => toggleMaterial(item.name)} /><MaterialIcon name={item.name} entity={item.entity} icon={item.icon} /><span><strong>{item.name}</strong>{item.availability.length > 0 && <small>{item.availability.join(', ')}</small>}</span><strong>{item.amount ?? '—'}</strong><em>{item.category ?? ''}</em></label>)}</div>{!filteredMaterials.length && <div className="empty-state">No material in this plan matches the selected view.</div>}</>}
         {error && <div className="error-box"><strong>Checklist unavailable.</strong><p>{error}</p></div>}
         {!materials.length && !error && <div className="empty-state">{built ? 'No materials were returned for this selection.' : 'Select characters and build the checklist. Amounts stay “—” when a source does not provide a quantity.'}</div>}
       </section>

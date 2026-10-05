@@ -12,6 +12,8 @@ import { MapPage } from './pages/MapPage';
 import { MaterialsPage } from './pages/MaterialsPage';
 import { AccountPage } from './pages/AccountPage';
 import { ComparePage } from './pages/ComparePage';
+import { ProfilePage } from './pages/ProfilePage';
+import { ShowcaseCharacterPage } from './pages/ShowcaseCharacterPage';
 
 export default function App() {
   return (
@@ -50,6 +52,9 @@ export default function App() {
             <Route path="/materials" element={<MaterialsPage />} />
             <Route path="/compare" element={<ComparePage />} />
             <Route path="/account" element={<AccountPage />} />
+            <Route path="/profile" element={<ProfilePage />} />
+            <Route path="/profile/:uid" element={<ProfilePage />} />
+            <Route path="/profile/:uid/characters/:avatar" element={<ShowcaseCharacterPage />} />
             <Route path="/map" element={<MapPage />} />
             <Route path="/guides" element={<GuidesPage />} />
             <Route path="/sources" element={<SourcesPage />} />

@@ -3,6 +3,8 @@ import { ArrowLeftRight, ExternalLink } from 'lucide-react';
 import { fetchAggregatedCharacter } from '../api/aggregator';
 import { fetchPlayerGuide, type LivePlayerGuide } from '../api/playerGuide';
 import { SectionTitle } from '../components/SectionTitle';
+import { AsyncImage } from '../components/AsyncImage';
+import { assetKey, characterImageSources } from '../api/genshinDev';
 import { useCharacters } from '../hooks/useCharacters';
 import { baseStatRows, formatValue } from '../utils/genshin';
 import type { AggregatedCharacter, GenshinCharacter } from '../types/genshin';
@@ -54,9 +56,14 @@ function ComparisonColumn({ entry, side }: { entry: ComparisonEntry; side: strin
   const sourceLinks = guide?.sourceLinks ?? [];
 
   return <section className="panel compare-column">
+    <div className="compare-character-header">
+      <div className={`compare-character-portrait rarity-${character.rarity ?? 0}`}><AsyncImage src={characterImageSources(character)} alt="" assetKey={assetKey('characters', character.id)} /></div>
+      <div>
     <div className="eyebrow">{character.element ?? 'Unknown'} · {character.weapon ?? 'Weapon'}</div>
     <h2>{character.name}</h2>
     <p className="muted">{character.region ?? 'Teyvat'} · {character.rarity ? `${character.rarity}★` : 'Rarity unavailable'}</p>
+      </div>
+    </div>
 
     <div className="compare-stat-grid">
       <div><span>HP</span><strong>{progression ? formatValue(progression.hp) : '—'}</strong></div>
