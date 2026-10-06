@@ -4,7 +4,6 @@ import { SectionTitle } from './SectionTitle';
 import { ProfileImage } from './ProfileImage';
 import { AssetPlaceholder } from './AssetPlaceholder';
 import { ConnectedProfileBanner } from './ConnectedProfileBanner';
-import { ResinAlarm } from './ResinAlarm';
 import { Link } from 'react-router-dom';
 import type { PrivateCharacter, PrivateProfile, ProfileRosterView } from '../types/myProfile';
 
@@ -31,7 +30,7 @@ function ExplorationCard({ entry }: { entry: PrivateProfile['exploration'][numbe
   </article>;
 }
 
-export function ConnectedProfileOverview({ profile, characters: roster, rosterView, onRosterViewChange, csrf, expiresAt, onExpired, onAlarmBusyChange }: { profile: PrivateProfile; characters: PrivateCharacter[]; rosterView: ProfileRosterView; onRosterViewChange: (view: ProfileRosterView) => void; csrf: string; expiresAt?: number; onExpired: () => void; onAlarmBusyChange: (active: boolean) => void }) {
+export function ConnectedProfileOverview({ profile, characters: roster, rosterView, onRosterViewChange, csrf, onExpired }: { profile: PrivateProfile; characters: PrivateCharacter[]; rosterView: ProfileRosterView; onRosterViewChange: (view: ProfileRosterView) => void; csrf: string; onExpired: () => void }) {
   const { search, element, sort } = rosterView;
   const deferredSearch = useDeferredValue(search);
   const id = useId();
@@ -65,7 +64,7 @@ export function ConnectedProfileOverview({ profile, characters: roster, rosterVi
     <nav className="profile-section-shortcuts" aria-label="My Profile sections">{jumps.map(({ key, label, icon: Icon }) => <button type="button" key={key} onClick={() => jump(key)}><Icon size={16} aria-hidden="true" /><span>{label}</span></button>)}</nav>
     <section className="profile-metrics profile-metrics--overview profile-account-metrics" aria-label="My account progress">{metrics.map(({ label, amount, icon: Icon }) => <article key={label}><Icon size={19} aria-hidden="true" /><span>{label}</span><strong>{typeof amount === 'number' ? value(amount) : amount ?? '—'}</strong></article>)}</section>
     <section id={`${id}-daily`} tabIndex={-1} className="section-block profile-section-anchor"><SectionTitle eyebrow="REAL-TIME NOTES" title="Your daily adventure" /><div className="connected-profile-daily">
-      <article className="panel profile-resin-card"><div className="eyebrow"><Droplets size={16} aria-hidden="true" />ORIGINAL RESIN</div><h2>{value(notes?.resin)} / {value(notes?.maxResin)}</h2>{notes?.resin != null && notes.maxResin != null && notes.maxResin > 0 && <progress className="profile-capacity" max={notes.maxResin} value={notes.resin} aria-label="Original Resin capacity" />}<p>{notes?.resin != null ? `Full recovery: ${duration(notes.recoverySeconds)}` : 'Enable Real-Time Notes in HoYoLAB to view resin.'}</p>{notes?.resin != null && Boolean(notes.maxResin) && <ResinAlarm profile={profile} csrf={csrf} expiresAt={expiresAt} onBusyChange={onAlarmBusyChange} />}</article>
+      <article className="panel profile-resin-card"><div className="eyebrow"><Droplets size={16} aria-hidden="true" />ORIGINAL RESIN</div><h2>{value(notes?.resin)} / {value(notes?.maxResin)}</h2>{notes?.resin != null && notes.maxResin != null && notes.maxResin > 0 && <progress className="profile-capacity" max={notes.maxResin} value={notes.resin} aria-label="Original Resin capacity" />}<p>{notes?.resin != null ? `Full recovery: ${duration(notes.recoverySeconds)}` : 'Enable Real-Time Notes in HoYoLAB to view resin.'}</p></article>
       <article className="panel"><div className="eyebrow"><CalendarDays size={16} aria-hidden="true" />DAILY COMMISSIONS</div><h2>{value(notes?.commissions)} / {value(notes?.maxCommissions)}</h2><p>{notes?.commissionRewardClaimed == null ? 'Reward status unavailable' : notes.commissionRewardClaimed ? 'Daily reward claimed' : 'Daily reward not claimed'}</p></article>
       <article className="panel"><div className="eyebrow"><Gem size={16} aria-hidden="true" />REALM CURRENCY</div><h2>{value(notes?.realmCurrency)} / {value(notes?.maxRealmCurrency)}</h2><p>Serenitea Pot currency at the last refresh.</p></article>
     </div>{Boolean(notes?.expeditions.length) && <div className="connected-profile-expeditions">{notes?.expeditions.map((entry, index) => <article className="panel" key={index}><ProfileImage src={entry.icon} alt="" className="talent-icon" fallback={<AssetPlaceholder kind="character" />} /><div><strong>Expedition {index + 1}</strong><span>{entry.status === 'Finished' ? 'Ready to collect' : duration(entry.remainingSeconds)}</span></div></article>)}</div>}</section>

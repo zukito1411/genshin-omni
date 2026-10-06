@@ -27,7 +27,7 @@
 .connected-profile-page .profile-account-metrics article > svg { top: 14px; right: 12px; }
 .connected-profile-page .profile-account-metrics span { padding-right: 24px; overflow-wrap: anywhere; font-size: 12px; }
 .connected-profile-page .profile-account-metrics strong { padding-right: 0; font-size: 23px; overflow-wrap: anywhere; }
-.connected-profile-page .connected-profile-daily { grid-template-columns: 2fr 1fr 1fr; align-items: start; }
+.connected-profile-page .connected-profile-daily { grid-template-columns: 2fr 1fr 1fr; }
 .connected-profile-page .connected-profile-daily > article { padding: 18px; }
 .connected-profile-page .connected-profile-daily h2 { font-size: clamp(21px, 3vw, 29px); margin: 12px 0; }
 .connected-profile-page .connected-profile-daily .eyebrow { letter-spacing: .08em; font-size: 11px; line-height: 1.5; }

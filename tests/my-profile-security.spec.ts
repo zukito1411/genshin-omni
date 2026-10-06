@@ -84,6 +84,15 @@ test('CSRF, origin, ownership and arbitrary-query guards apply before private pr
   expect((await api.handler(api.request('POST', { action: 'character', uid: role.uid, characterId: 10000002 }, connected.cookie, connected.csrf))).status).toBe(200);
 });
 
+test('retired resin alarm API actions are rejected', async () => {
+  const api = setup();
+  const connected = await api.connect();
+  for (const action of ['push-status', 'push-prepare', 'push-save', 'push-remove']) {
+    const response = await api.handler(api.request('POST', { action, uid: role.uid }, connected.cookie, connected.csrf));
+    expect(response.status).toBe(400);
+  }
+});
+
 test('disconnect and expiry revoke replayed sessions and never overwrite player-local saves', async () => {
   const api = setup();
   const connected = await api.connect();

@@ -36,7 +36,6 @@ async function mock(page: Page, options: { available?: boolean; connected?: bool
     if (method === 'DELETE') { connected = false; return route.fulfill({ json: { available: true, connected: false } }); }
     if (body.action === 'connect') { connected = true; return route.fulfill({ json: { available: true, connected: true, roles: [role], csrf: 'c'.repeat(43) } }); }
     if (body.action === 'artwork') return route.fulfill({ json: { artwork: { uid: body.uid, avatar: 'UI_AvatarIcon_Ayaka_Circle.png', namecard: 'UI_NameCardPic_Ambor_P.jpg' } } });
-    if (body.action === 'push-status') return route.fulfill({ json: { alarm: null } });
     if (options.profileFailure) return route.fulfill({ status: 503, json: { code: 'unavailable', debug: 'do-not-display-internal-log' } });
     if (body.action === 'profile') return route.fulfill({ json: { profile: options.noNotes ? { ...profile, notes: null, unavailable: ['notes'] } : profile } });
     return route.fulfill({ json: { character: build } });
@@ -480,7 +479,7 @@ test('mobile profile shortcuts, roster filters and safe regional artwork work wi
   await page.getByRole('button', { name: 'Daily notes', exact: true }).click();
   await expect(page.locator('.profile-section-anchor:focus')).toContainText('Your daily adventure');
   await expect(page.getByRole('progressbar', { name: 'Original Resin capacity' })).toHaveAttribute('value', '40');
-  await expect(page.getByRole('button', { name: 'Set alarm', exact: true })).toBeVisible();
+  await expect(page.locator('.resin-alarm')).toHaveCount(0);
   await page.screenshot({ path: testInfo.outputPath('mobile-profile-daily.png') });
   const beforeFiltering = requests.length;
   await page.getByRole('button', { name: 'Characters', exact: true }).click();

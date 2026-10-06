@@ -1,6 +1,5 @@
 import { getStore } from '@netlify/blobs';
 import { STORE } from '../lib/profile-security.mjs';
-import { PUSH_STORE } from '../lib/resin-push.mjs';
 
 // Invoked by Netlify's scheduler, not a public route. No credentials are decrypted.
 export default async (_request, context = {}) => {
@@ -8,7 +7,7 @@ export default async (_request, context = {}) => {
   if ((context.deploy?.context ?? process.env.CONTEXT) !== 'production' || context.deploy?.published === false) return;
   let checked = 0;
   const deadline = Date.now() + 20_000;
-  for (const name of [STORE, PUSH_STORE]) {
+  for (const name of [STORE, 'teyvat-resin-push-v2']) {
     const store = getStore({ name, consistency: 'strong' });
     for await (const page of store.list({ paginate: true })) {
       for (const blob of page.blobs) {

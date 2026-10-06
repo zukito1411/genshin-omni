@@ -5,7 +5,6 @@ import { SectionTitle } from '../components/SectionTitle';
 import { HoYoLabLoginForm } from '../components/HoYoLabLoginForm';
 import { ConnectedProfileOverview } from '../components/ConnectedProfileOverview';
 import { ConnectedBuild } from '../components/ConnectedBuild';
-import { localResinAlarms } from '../utils/localResinAlarms';
 import { usePaimonContext } from '../components/PaimonCompanion';
 import { useCharacters } from '../hooks/useCharacters';
 import { characterImageSources } from '../api/genshinDev';
@@ -77,10 +76,8 @@ export function MyProfilePage() {
     return { ...entry, name: entry.name === 'Name unavailable' ? match?.name ?? entry.name : entry.name, element: entry.element || match?.element || '', icon: entry.icon || (match ? characterImageSources(match, 'icon')[0] : '') };
   }) ?? [], [profile, catalog]);
   const operation = useRef<AbortController | null>(null);
-  const alarmSetup = useRef(false);
   const channel = useRef<BroadcastChannel | null>(null);
   const role = session?.roles?.find((entry) => entry.uid === uid) ?? (!uid ? session?.roles?.[0] : undefined);
-  useEffect(() => { if (session && !session.connected) localResinAlarms.clear(); }, [session?.connected]);
   useEffect(() => { setContext({ page: 'account' }); }, [setContext]); // Never share private account names with AI Paimon.
   useEffect(() => {
     const controller = new AbortController();
@@ -117,10 +114,7 @@ export function MyProfilePage() {
   }, [characterId, profile, session?.csrf, busy]);
   useEffect(() => {
     const recheck = () => { operation.current?.abort(); setBusy(false); setProfile(null); setBuild(null); setSession(null); setRefresh((previous) => previous + 1); };
-    // Mobile OS permission prompts may briefly hide/show the webview. Do not
-    // unmount an explicit notification setup in progress on return. Logout
-    // broadcasts and real pagehide/session errors still revoke immediately.
-    const show = () => { if (document.visibilityState === 'visible' && !alarmSetup.current) recheck(); };
+    const show = () => { if (document.visibilityState === 'visible') recheck(); };
     const hide = () => { operation.current?.abort(); setProfile(null); setBuild(null); setSession(null); };
     const restore = (event: PageTransitionEvent) => { if (event.persisted) recheck(); };
     try { channel.current = new BroadcastChannel('teyvat-profile-connection'); channel.current.onmessage = recheck; } catch { /* Visibility rechecks remain available. */ }
@@ -138,7 +132,6 @@ export function MyProfilePage() {
     setError(''); setSession(result); navigate('/me', { replace: true }); channel.current?.postMessage('changed');
   }
   async function disconnect() {
-    localResinAlarms.clear();
     operation.current?.abort(); const controller = new AbortController(); operation.current = controller;
     setBusy(true); setError(''); setProfile(null); setBuild(null);
     try { await myProfileRequest('DELETE', undefined, session?.csrf, controller.signal); if (!controller.signal.aborted) { setSession({ available: true, connected: false }); navigate('/me', { replace: true }); channel.current?.postMessage('changed'); } }
@@ -152,7 +145,7 @@ export function MyProfilePage() {
       <section className="panel connected-profile-toolbar"><label>Your Genshin account<select value={role?.uid ?? ''} onChange={(event) => navigate(`/me/${event.target.value}`)} disabled={busy}><option value="" disabled>Select an account</option>{session.roles?.map((entry) => <option key={entry.uid} value={entry.uid}>{entry.nickname} · {entry.server} · {entry.uid}</option>)}</select></label><div><button type="button" className="button secondary" onClick={() => setRefresh((previous) => previous + 1)} disabled={busy || loading}><RefreshCw size={15} />Refresh</button><button type="button" className="button secondary" onClick={() => void disconnect()} disabled={busy}><LogOut size={15} />{busy ? 'Disconnecting…' : 'Disconnect'}</button></div></section>
       {!role && <div className="empty-state">This UID is not connected to your HoYoLAB account. Choose one of your accounts above.</div>}
       {loading && <div className="detail-loading" role="status" aria-label="Loading your profile"><div className="skeleton-hero" /><div className="skeleton-line" /></div>}
-      {profile && !characterId && <ConnectedProfileOverview key={profile.role.uid} profile={profile} characters={enrichedCharacters} rosterView={rosterView} onRosterViewChange={setRosterView} csrf={session.csrf ?? ''} expiresAt={session.expiresAt} onAlarmBusyChange={(active) => { alarmSetup.current = active; }} onExpired={() => { setProfile(null); setBuild(null); setSession({ available: true, connected: false }); setError('Your connection has expired. Please connect your HoYoLAB account again.'); }} />}
+      {profile && !characterId && <ConnectedProfileOverview key={profile.role.uid} profile={profile} characters={enrichedCharacters} rosterView={rosterView} onRosterViewChange={setRosterView} csrf={session.csrf ?? ''} onExpired={() => { setProfile(null); setBuild(null); setSession({ available: true, connected: false }); setError('Your connection has expired. Please connect your HoYoLAB account again.'); }} />}
       {characterId && <><Link to={`/me/${role?.uid ?? ''}`} className="button secondary"><ArrowLeft size={15} />Back to My Profile</Link>{buildError ? <div role="alert" className="error-box">{buildError}</div> : build ? <ConnectedBuild key={`${role?.uid}:${build.id}`} build={{ ...build, ...enrich(build) }} characters={enrichedCharacters} onCharacterChange={(id) => navigate(`/me/${role?.uid}/characters/${id}`)} /> : profile && <div role="status" className="loading">Loading your equipped build…</div>}</>}
       <details className="connected-profile-privacy"><summary><ShieldCheck size={15} aria-hidden="true" />Connection & privacy</summary><p>Your account information is not saved in browser storage or sent to AI Paimon. Disconnect removes this connection from our server. Some HoYoLAB features may be unavailable; this page does not expose every part of your game account.</p></details>
     </>}

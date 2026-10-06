@@ -5,7 +5,6 @@ import { useCharacters } from '../hooks/useCharacters';
 import { clearAppCache } from '../api/cache';
 import { clearResponseCache } from '../api/responseCache';
 import { usePaimonContext } from './PaimonCompanion';
-import { ResinAlarmNotifier } from './ResinAlarmNotifier';
 
 const nav = [
   { to: '/', label: 'Home', icon: Home },
@@ -31,6 +30,24 @@ export function AppShell() {
   const navRef = useRef<HTMLElement>(null);
   const { allCharacters } = useCharacters('', openSearch || Boolean(query));
   const { shown, setShown } = usePaimonContext();
+
+  useEffect(() => {
+    if (!('serviceWorker' in navigator)) return;
+    const retiredWorkerUrl = new URL('/resin-worker.js', window.location.origin).href;
+    void navigator.serviceWorker.getRegistrations().then(async (registrations) => {
+      const retired = registrations.filter((registration) =>
+        [registration.active, registration.waiting, registration.installing]
+          .some((worker) => worker?.scriptURL === retiredWorkerUrl),
+      );
+      await Promise.all(retired.map(async (registration) => {
+        const subscription = await registration.pushManager.getSubscription();
+        if (subscription) await subscription.unsubscribe();
+        await registration.unregister();
+      }));
+    }).catch(() => {
+      console.warn('Could not remove the retired resin notification worker.');
+    });
+  }, []);
 
   useEffect(() => {
     if (window.matchMedia('(max-width: 900px)').matches) {
@@ -128,7 +145,6 @@ export function AppShell() {
 
   return (
     <div className="app-shell">
-      <ResinAlarmNotifier />
       <aside className="sidebar">
         <Link className="brand" to="/" aria-label="Teyvat Atlas home">
           <div className="brand-mark">
