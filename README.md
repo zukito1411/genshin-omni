@@ -106,11 +106,17 @@ per-session server-memory cache shares recent reads for 30 seconds. Missing
 information is marked unavailable, never fabricated.
 
 Connected profiles automatically resolve the owned UID's public avatar and
-namecard through Enka, without requiring another search. Only artwork filenames
-are returned; HoYoLAB credentials never go to Enka, and public profile/build
+namecard through Enka, without requiring another search. When the direct public
+lookup is unreachable, it uses the same fixed public-reader fallback as UID
+Search, within a bounded timeout. Only artwork filenames
+are returned; HoYoLAB credentials never go to Enka or the reader, and public profile/build
 payloads are not stored as part of this lookup. Public in-game changes may take
 a few minutes to appear. Character details parse HoYoLAB's nested `base` and
 property map; exploration uses alternate supplied icons/covers when necessary.
+Owned builds have Overview, Artifacts, Talents, and Constellations tabs plus an
+owned-character selector. Talent/effect descriptions expand on demand; game
+link tokens and escaped newlines are cleaned as plain text, with paragraphs
+preserved. Artwork retry also rechecks failed image sources on that page.
 
 The main connection flow is now **email/username and HoYoverse password**, followed
 by HoYoLAB's CAPTCHA when required. Credentials are RSA-encrypted in the browser

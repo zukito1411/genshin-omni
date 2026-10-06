@@ -1,5 +1,6 @@
 // Only explicitly selected display fields leave the private backend.
-const text = (value, limit = 120) => typeof value === 'string' ? value.replace(/<[^>]*>/g, '').replace(/[\u0000-\u001f]/g, ' ').trim().slice(0, limit) : '';
+import { connectedGameText } from '../../shared/connectedGameText.mjs';
+const text = (value, limit = 120) => connectedGameText(value, limit).replace(/\n/g, ' ');
 const number = (value, maximum = 1e9) => typeof value === 'number' && Number.isFinite(value) && value >= 0 && value <= maximum ? value : null;
 const list = (value, maximum = 200) => Array.isArray(value) ? value.slice(0, maximum) : [];
 const name = (value, fallback) => { const clean = text(value); return clean && !/^\d+$|^(?:item|character|weapon|artifact)[\s#-]*\d+$/i.test(clean) ? clean : fallback; };
@@ -69,7 +70,7 @@ export function normalizeBuild(data, characterId) {
     stats: properties([...list(character.base_properties), ...list(character.extra_properties), ...list(character.element_properties), ...list(character.selected_properties)]).filter((entry, index, entries) => entries.findIndex((other) => other.label === entry.label) === index),
     weapon: weapon ? { name: name(weapon.name, 'Weapon name unavailable'), icon: imageUrl(weapon.icon), level: number(weapon.level, 100), refinement: number(weapon.affix_level, 5), rarity: number(weapon.rarity, 5), stats: properties([weapon.main_property, weapon.sub_property]) } : null,
     artifacts: list(character.relics, 5).map((item) => ({ name: name(item?.name, 'Artifact name unavailable'), icon: imageUrl(item?.icon), slot: text(item?.pos_name), level: number(item?.level, 20), set: name(item?.set?.name, ''), stats: properties([item?.main_property, ...list(item?.sub_property_list, 4)]) })),
-    skills: list(character.skills, 12).map((skill) => ({ name: text(skill?.name) || 'Talent name unavailable', icon: imageUrl(skill?.icon), level: number(skill?.level, 20), description: text(skill?.desc, 2000) })),
-    constellations: list(character.constellations, 6).map((entry) => ({ name: text(entry?.name) || 'Constellation name unavailable', icon: imageUrl(entry?.icon), unlocked: entry?.is_actived === true, description: text(entry?.effect, 2000) })),
+    skills: list(character.skills, 12).map((skill) => ({ name: text(skill?.name) || 'Talent name unavailable', icon: imageUrl(skill?.icon), level: number(skill?.level, 20), description: connectedGameText(skill?.desc) })),
+    constellations: list(character.constellations, 6).map((entry) => ({ name: text(entry?.name) || 'Constellation name unavailable', icon: imageUrl(entry?.icon), unlocked: entry?.is_actived === true, description: connectedGameText(entry?.effect) })),
   };
 }

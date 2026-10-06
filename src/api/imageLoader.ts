@@ -11,6 +11,10 @@ let downloading = 0;
 const hostOf = (source: string) => { try { return new URL(source, window.location.href).host; } catch { return ''; } };
 function trim(map: Map<string, number>) { if (map.size > 512) map.delete(map.keys().next().value!); }
 export function invalidateImage(source: string) { ready.delete(source); failed.set(source, Date.now()); trim(failed); }
+/** An explicit retry may recheck these exact images, without clearing good art. */
+export function retryImageSources(sources: string[]) {
+  for (const source of sources) { failed.delete(source); timedOutHosts.delete(hostOf(source)); }
+}
 
 function drain() {
   queue.sort((a, b) => b.priority - a.priority);

@@ -74,3 +74,44 @@ test('malformed, mismatched and unavailable public profiles fail safely and requ
   await expect(provider.get(uid)).rejects.toMatchObject({ code: 'artwork_unavailable' });
   expect(calls).toBe(2);
 });
+
+test('connected artwork uses the fixed public reader when direct Enka is unreachable without forwarding private credentials', async () => {
+  for (const failure of ['network', '403', '503']) {
+    const calls: string[] = [];
+    const provider = createEnkaArtworkProvider(async (url: string, options: any) => {
+      calls.push(url);
+      expect(options.credentials).toBe('omit');
+      expect(options.redirect).toBe('error');
+      expect(options.signal).toBeInstanceOf(AbortSignal);
+      expect(Object.keys(options.headers).sort()).toEqual(['Accept', 'User-Agent']);
+      if (url === `https://enka.network/api/uid/${uid}/`) {
+        if (failure === 'network') throw new TypeError('fixture network failure');
+        return new Response('', { status: Number(failure) });
+      }
+      if (url === `https://r.jina.ai/http://enka.network/api/uid/${uid}/`) return Response.json({ data: { content: JSON.stringify({ uid, playerInfo: { profilePicture: { id: 200 }, nameCardId: 210003, nickname: 'not-returned' } }) } });
+      return Response.json(url.endsWith('/pfps.json') ? catalogs.pfps : catalogs.namecards);
+    });
+    expect(await provider.get(uid)).toEqual({ uid, avatar: 'UI_AvatarIcon_Ayaka_Circle.png', namecard: 'UI_NameCardPic_Ambor_P.jpg' });
+    expect(calls).toHaveLength(4);
+    await provider.get(uid);
+    expect(calls).toHaveLength(4);
+  }
+});
+
+test('artwork reader rejects mismatched, oversized and malformed payloads and does not retry missing profiles', async () => {
+  for (const content of ['not JSON', JSON.stringify({ uid: '800000999', playerInfo: {} }), JSON.stringify({ playerInfo: [] }), 'x'.repeat(2_000_001), undefined]) {
+    const calls: string[] = [];
+    const provider = createEnkaArtworkProvider(async (url: string) => {
+      calls.push(url);
+      return url.startsWith('https://enka.network/') ? new Response('', { status: 503 }) : Response.json({ data: { content } });
+    });
+    await expect(provider.get(uid)).rejects.toMatchObject({ code: 'artwork_unavailable' });
+    expect(calls).toEqual([`https://enka.network/api/uid/${uid}/`, `https://r.jina.ai/http://enka.network/api/uid/${uid}/`]);
+  }
+  for (const status of [400, 404, 429]) {
+    let calls = 0;
+    const provider = createEnkaArtworkProvider(async () => { calls++; return new Response('', { status }); });
+    await expect(provider.get(uid)).rejects.toMatchObject({ code: 'artwork_unavailable' });
+    expect(calls).toBe(1);
+  }
+});

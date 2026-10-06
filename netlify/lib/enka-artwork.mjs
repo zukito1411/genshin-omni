@@ -36,6 +36,26 @@ export function createEnkaArtworkProvider(fetcher = fetch, now = Date.now) {
     if (!response.ok) { const error = new Error('Artwork source unavailable.'); error.status = response.status; throw error; }
     return boundedJson(response, 2_000_000, signal);
   }
+  async function publicProfile(uid) {
+    // Keep both attempts inside one budget, leaving time for the small catalogs
+    // before the private-page request times out. Destinations are fixed/public.
+    const budget = AbortSignal.timeout(11_000);
+    let payload;
+    try {
+      payload = await read(`https://enka.network/api/uid/${uid}/`, AbortSignal.any([budget, AbortSignal.timeout(5000)]));
+    } catch (error) {
+      // Do not bypass an upstream cooldown or retry a nonexistent UID.
+      if (budget.aborted || [400, 404, 429].includes(error.status)) throw error;
+      const reader = await read(`https://r.jina.ai/http://enka.network/api/uid/${uid}/`, budget);
+      const content = reader?.data?.content;
+      if (typeof content !== 'string' || !content.length || content.length > 2_000_000) throw new Error('Artwork unavailable.');
+      payload = JSON.parse(content);
+    }
+    const data = object(payload);
+    if (data.uid !== undefined && String(data.uid) !== uid) throw new Error('Artwork identity mismatch.');
+    if (!data.playerInfo || typeof data.playerInfo !== 'object' || Array.isArray(data.playerInfo)) throw new Error('Artwork unavailable.');
+    return data;
+  }
   async function catalog(kind) {
     let entry = catalogs.get(kind);
     if (entry?.until > now()) return entry.promise;
@@ -60,9 +80,7 @@ export function createEnkaArtworkProvider(fetcher = fetch, now = Date.now) {
       entry = { until: time + 60_000, promise: null };
       entry.promise = (async () => {
         try {
-          const data = object(await read(`https://enka.network/api/uid/${uid}/`, AbortSignal.timeout(8000)));
-          if (data.uid !== undefined && String(data.uid) !== uid) throw new Error('Artwork identity mismatch.');
-          if (!data.playerInfo || typeof data.playerInfo !== 'object' || Array.isArray(data.playerInfo)) throw new Error('Artwork unavailable.');
+          const data = await publicProfile(uid);
           const player = data.playerInfo;
           // No nickname, signature, build, stat, or raw player payload is cached.
           const selectors = { profilePicture: { id: player.profilePicture?.id, avatarId: player.profilePicture?.avatarId, costumeId: player.profilePicture?.costumeId }, nameCardId: id(player.nameCardId) ? player.nameCardId : player.namecardId };

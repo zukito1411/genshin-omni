@@ -87,9 +87,12 @@ test('connection consent, readable daily notes and owned builds work across mobi
   await expect(page.getByRole('heading', { name: 'Mistsplitter Reforged', exact: true })).toBeVisible();
   await expect(page.locator('main')).toContainText('674');
   await expect(page.locator('main')).toContainText('210%');
+  await page.getByRole('tab', { name: 'Artifacts', exact: true }).click();
   await expect(page.getByRole('heading', { name: 'Snowswept Memory' })).toBeVisible();
   await expect(page.locator('main')).toContainText('10.1%');
+  await page.getByRole('tab', { name: 'Talents', exact: true }).click();
   await expect(page.getByRole('heading', { name: 'Kamisato Art: Hyouka' })).toBeVisible();
+  await page.getByRole('tab', { name: 'Constellations', exact: true }).click();
   await expect(page.getByRole('heading', { name: 'Snowswept Sakura' })).toBeVisible();
   await expect(page.locator('main pre, .showcase-raw')).toHaveCount(0);
   await page.reload();
@@ -377,4 +380,75 @@ test('production security policy permits the private page and blocks third-party
   }));
   expect(blocked).toBe(true);
   expect(errors).toEqual([]);
+});
+
+test('owned builds stay compact on mobile, clean provider descriptions and support keyboard tabs and character switching', async ({ page }, testInfo) => {
+  await mock(page, { connected: true });
+  const other = { ...character, id: 10000003, name: 'Jean' };
+  const description = 'Uses {LINK#N11430001}Armed for Action{/LINK}.\\n\\n<color=#00ffff>Windborne Sword</color> &amp; Spirit Blades.\\n' + 'A full ability description. '.repeat(160) + 'Final sentence.';
+  await page.route('**/api/my-profile', (route) => {
+    const input = route.request().postData() ? route.request().postDataJSON() : undefined;
+    if (input?.action === 'profile') return route.fulfill({ json: { profile: { ...profile, characters: [character, other] } } });
+    if (input?.action === 'character') return route.fulfill({ json: { character: { ...build, ...(input.characterId === other.id ? other : character), skills: Array.from({ length: 6 }, (_, index) => ({ ...build.skills[0], name: `Ability ${index + 1}`, description })), constellations: [{ ...build.constellations[0], unlocked: false, description }] } } });
+    return route.fallback();
+  });
+  await page.setViewportSize({ width: 320, height: 740 });
+  await page.goto(`/me/${role.uid}/characters/${character.id}`);
+  await expect(page.getByRole('heading', { name: 'Mistsplitter Reforged', exact: true })).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'Ability 1', exact: true })).toHaveCount(0);
+  await page.getByRole('tab', { name: 'Talents', exact: true }).click();
+  const abilities = page.locator('.connected-build-ability');
+  await expect(abilities).toHaveCount(6);
+  await expect(page.locator('.connected-build-ability[open]')).toHaveCount(0);
+  expect(await page.locator('.connected-build-abilities').evaluate((node) => node.getBoundingClientRect().height)).toBeLessThan(800);
+  await page.screenshot({ path: testInfo.outputPath('mobile-build-talents.png') });
+  await abilities.first().locator('summary').click();
+  const paragraph = abilities.first().locator('p');
+  await expect(paragraph).toBeVisible();
+  await expect(paragraph).toContainText('Armed for Action.\n\nWindborne Sword & Spirit Blades.');
+  await expect(paragraph).toContainText('Final sentence.');
+  expect(await paragraph.evaluate((node) => getComputedStyle(node).whiteSpace)).toBe('pre-line');
+  await expect(page.locator('main')).not.toContainText('{LINK');
+  await expect(page.locator('main')).not.toContainText('\\n');
+  await expect(page.locator('.connected-build-panel img[onerror], .connected-build-panel script')).toHaveCount(0);
+  for (const width of [320, 390, 768, 1366]) {
+    await page.setViewportSize({ width, height: 844 });
+    expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+  }
+  await page.setViewportSize({ width: 320, height: 740 });
+  await page.evaluate(() => window.scrollBy(0, 700));
+  expect(await page.getByRole('tablist', { name: 'Equipped build sections' }).evaluate((node) => node.getBoundingClientRect().top)).toBeGreaterThanOrEqual(59);
+  const talents = page.getByRole('tab', { name: 'Talents', exact: true });
+  await talents.focus(); await talents.press('ArrowRight');
+  await expect(page.getByRole('tab', { name: 'Constellations', exact: true })).toHaveAttribute('aria-selected', 'true');
+  await expect(page.getByRole('heading', { name: 'Snowswept Sakura', exact: true })).toBeVisible();
+  await expect(page.locator('.connected-build-ability summary')).toContainText('Locked');
+  await page.getByRole('tab', { name: 'Constellations', exact: true }).press('Home');
+  await expect(page.getByRole('tab', { name: 'Overview', exact: true })).toBeFocused();
+  await page.getByRole('combobox', { name: 'Choose owned character', exact: true }).selectOption(String(other.id));
+  await expect(page).toHaveURL(new RegExp(`/me/${role.uid}/characters/${other.id}$`));
+  await expect(page.getByRole('heading', { name: 'Jean', exact: true })).toBeVisible();
+  await expect(page.getByRole('tab', { name: 'Overview', exact: true })).toHaveAttribute('aria-selected', 'true');
+  await page.getByRole('tab', { name: 'Talents', exact: true }).click();
+  await expect(page.locator('.connected-build-ability[open]')).toHaveCount(0);
+  const stored = await page.evaluate(() => JSON.stringify({ ...localStorage, ...sessionStorage }));
+  expect(stored).not.toContain(role.uid);
+  expect(stored).not.toContain('Armed for Action');
+});
+
+test('Retry artwork rechecks the same failed images rather than getting stuck in the image cooldown', async ({ page }) => {
+  await mock(page, { connected: true });
+  let blocked = true;
+  await page.route('**/*', (route) => {
+    if (!route.request().url().startsWith('http://127.0.0.1:4173') && route.request().resourceType() === 'image' && blocked) return route.fulfill({ status: 404 });
+    return route.fallback();
+  });
+  await page.goto('/me');
+  await expect(page.getByRole('button', { name: 'Retry artwork', exact: true })).toBeVisible();
+  await expect(page.locator('.connected-profile-banner img.profile-avatar')).toHaveCount(0);
+  blocked = false;
+  await page.getByRole('button', { name: 'Retry artwork', exact: true }).click();
+  await expect(page.locator('.connected-profile-banner img.profile-avatar')).toBeVisible();
+  await expect(page.locator('.connected-profile-banner img.profile-banner__background')).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Retry artwork', exact: true })).toHaveCount(0);
 });

@@ -94,7 +94,7 @@
   .connected-profile-toolbar button { flex: 1; justify-content: center; min-height: 44px; }
   .connected-profile-form input:not([type='checkbox']), .connected-profile-form select, .connected-profile-toolbar select { font-size: 16px; }
   .connected-profile-form button { width: 100%; justify-content: center; }
-  .connected-profile-page .showcase-stats { grid-template-columns: 1fr; }
+  .connected-profile-page .showcase-stats { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 }
 * { box-sizing: border-box; }
 html { background: var(--bg); }
@@ -1821,4 +1821,35 @@ button:focus-visible, a:focus-visible, input:focus-visible, select:focus-visible
     min-width: 0;
     max-width: none;
   }
+}
+
+/* Compact owned builds; deliberately scoped away from public UID Search. */
+.connected-build { min-width: 0; margin-top: 18px; scroll-margin-top: 80px; }
+.connected-build-picker { display: grid; gap: 8px; max-width: 520px; margin-bottom: 14px; font-size: 13px; }
+.connected-build-picker select { width: 100%; min-width: 0; min-height: 44px; padding: 10px 12px; border: 1px solid var(--line); border-radius: 9px; background: var(--bg); color: var(--text); font: inherit; }
+.connected-build-tabs { position: sticky; top: 68px; z-index: 10; display: flex; gap: 4px; overflow-x: auto; margin-top: 16px; padding: 6px; border: 1px solid var(--line); border-radius: 12px; background: var(--bg); scroll-margin-top: 68px; }
+.connected-build-tabs button { flex: 1 0 auto; min-height: 44px; padding: 10px 14px; border: 0; border-radius: 8px; background: transparent; color: var(--muted); font: inherit; font-size: 13px; cursor: pointer; }
+.connected-build-tabs button[aria-selected='true'] { background: var(--panel-2); color: var(--gold); }
+.connected-build-tabs button:focus-visible, .connected-build-ability summary:focus-visible { outline: 2px solid var(--gold); outline-offset: -2px; }
+.connected-build-panel { min-width: 0; }
+.connected-build .showcase-stats > div { min-width: 0; padding: 12px; }
+.connected-build .showcase-stats dt, .connected-build .build-stat-list dt { overflow-wrap: anywhere; }
+.connected-build .build-stat-list dd { flex-shrink: 1; text-align: right; overflow-wrap: anywhere; }
+.connected-build-abilities { display: grid; gap: 10px; }
+.connected-build-ability { min-width: 0; }
+.connected-build-ability summary { display: flex; align-items: center; gap: 12px; padding: 14px; cursor: pointer; list-style: none; }
+.connected-build-ability summary::-webkit-details-marker { display: none; }
+.connected-build-ability summary > div:nth-child(2) { flex: 1; min-width: 0; }
+.connected-build-ability summary > svg { flex-shrink: 0; color: var(--muted); }
+.connected-build-ability[open] summary > svg { transform: rotate(180deg); }
+.connected-build-ability h3 { margin: 0 0 6px; font-size: 15px; line-height: 1.4; overflow-wrap: anywhere; }
+.connected-build-ability summary span { font-size: 12px; }
+.connected-build-ability__icon { display: grid; justify-items: center; gap: 4px; flex: 0 0 36px; color: var(--gold); }
+.connected-build-ability__icon .ability-icon { width: 32px; height: 32px; }
+.connected-build-ability > p { margin: 0; padding: 0 16px 16px; white-space: pre-line; overflow-wrap: anywhere; font-size: 14px; line-height: 1.65; color: var(--muted); }
+@media (max-width: 700px) {
+  .connected-build { scroll-margin-top: 72px; }
+  .connected-build-tabs { top: 60px; scroll-margin-top: 60px; }
+  .connected-build-tabs button { padding-inline: 10px; font-size: 12px; }
+  .connected-build-picker select { font-size: 16px; }
 }

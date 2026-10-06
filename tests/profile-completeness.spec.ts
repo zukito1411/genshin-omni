@@ -2,6 +2,7 @@ import { expect, test } from '@playwright/test';
 import { normalizeBuild, normalizeCharacter, normalizeProfile, imageUrl } from '../netlify/lib/hoyolab-data.mjs';
 import { createHoyolabProvider } from '../netlify/lib/hoyolab-provider.mjs';
 import { profileImageSources } from '../src/utils/profileImages';
+import { connectedGameText } from '../shared/connectedGameText.mjs';
 
 const role = { uid: '800000001', region: 'os_asia' };
 const icon = 'https://upload-os-bbs.hoyolab.com/game_record/UI_AvatarIcon_Ayaka.png';
@@ -54,4 +55,23 @@ test('exploration retains alternative artwork, safe CDN transforms, zero progres
   expect(profileImageSources(icon)[0]).toBe(icon);
   expect(profileImageSources(icon)).toContain('https://enka.network/ui/UI_AvatarIcon_Ayaka.png');
   expect(profileImageSources('https://upload-os-bbs.hoyolab.com/non-game-image.png')).toHaveLength(1);
+});
+
+test('connected talent and constellation descriptions remove game links, decode paragraphs and preserve full kit text', () => {
+  const text = 'Calls forth {LINK#N11430001}Armed for Action{/LINK}.\\n\\n<color=#00ffff>Windborne Sword</color><br>For the {LINK#S11435}Tsaritsa!{/LINK} &amp; friends.&#10;• Deal 100% DMG.';
+  const expected = 'Calls forth Armed for Action.\n\nWindborne Sword\nFor the Tsaritsa! & friends.\n• Deal 100% DMG.';
+  const data = structuredClone(raw);
+  data.list[0].skills[0].desc = text;
+  data.list[0].constellations[0].effect = text;
+  const result = normalizeBuild(data, 10000002);
+  expect(result.skills[0].description).toBe(expected);
+  expect(result.constellations[0].description).toBe(expected);
+  expect(connectedGameText(expected)).toBe(expected);
+  const long = 'Complete description. '.repeat(200) + 'Final sentence.';
+  expect(connectedGameText(long)).toBe(long);
+  data.list[0].skills[0].desc = long;
+  expect(normalizeBuild(data, 10000002).skills[0].description).toBe(long);
+  expect(connectedGameText('x'.repeat(100_000))).toHaveLength(20_000);
+  expect(connectedGameText(null)).toBe('');
+  expect(connectedGameText('&lt;img src=x onerror=alert(1)&gt;Safe&#xD800;')).toBe('Safe');
 });

@@ -6,13 +6,14 @@ import { ProfileImage as AsyncImage } from '../components/ProfileImage';
 import { AssetPlaceholder } from '../components/AssetPlaceholder';
 import { HoYoLabLoginForm } from '../components/HoYoLabLoginForm';
 import { ConnectedProfileBanner } from '../components/ConnectedProfileBanner';
+import { ConnectedBuild } from '../components/ConnectedBuild';
 import { ResinAlarm } from '../components/ResinAlarm';
 import { localResinAlarms } from '../utils/localResinAlarms';
 import { usePaimonContext } from '../components/PaimonCompanion';
 import { useCharacters } from '../hooks/useCharacters';
 import { characterImageSources } from '../api/genshinDev';
 import { MyProfileError, myProfileRequest } from '../api/myProfile';
-import type { PrivateBuild, PrivateEquipment, PrivateProfile, PrivateStat, ProfileSession } from '../types/myProfile';
+import type { PrivateBuild, PrivateProfile, ProfileSession } from '../types/myProfile';
 
 const value = (number: number | null | undefined) => number === null || number === undefined ? '—' : number.toLocaleString();
 function duration(seconds: number | null) {
@@ -21,25 +22,9 @@ function duration(seconds: number | null) {
   const minutes = Math.ceil(seconds / 60);
   return minutes >= 60 ? `${Math.floor(minutes / 60)}h ${minutes % 60}m` : `${minutes}m`;
 }
-function Stats({ stats }: { stats: PrivateStat[] }) {
-  return stats.length ? <dl className="showcase-stats">{stats.map((stat, index) => <div key={`${stat.label}-${index}`}><dt>{stat.label}</dt><dd>{stat.value}</dd></div>)}</dl> : <p className="muted">These stats were not shared by HoYoLAB.</p>;
-}
-function Equipment({ item, title }: { item: PrivateEquipment; title: string }) {
-  return <article className="panel equipped-item"><div className="equipped-item__head"><AsyncImage src={item.icon} alt="" className="equipped-item__image" fallback={<AssetPlaceholder kind="artifact" />} /><div><div className="eyebrow">{title}</div><h3>{item.name}</h3><p>Level {value(item.level)}</p></div></div><Stats stats={item.stats} /></article>;
-}
 const OwnedCharacterCard = memo(function OwnedCharacterCard({ entry, uid }: { entry: PrivateProfile['characters'][number]; uid: string }) {
   return <Link className="showcase-card showcase-card--link" to={`/me/${uid}/characters/${entry.id}`}><AsyncImage src={entry.icon} alt="" className="showcase-card__image" fallback={<AssetPlaceholder kind="character" />} /><div><strong>{entry.name}</strong><span>{entry.element} · Level {value(entry.level)} · C{value(entry.constellation)}</span><span>View equipped build</span></div><ArrowRight size={17} /></Link>;
 });
-function ConnectedBuild({ build }: { build: PrivateBuild }) {
-  return <>
-    <section className="panel showcase-build-hero"><AsyncImage src={build.image || build.icon} alt="" className="showcase-build-hero__image" loading="eager" fallback={<AssetPlaceholder kind="character" />} /><div className="showcase-build-hero__copy"><div className="eyebrow">MY EQUIPPED BUILD</div><h1>{build.name}</h1><p>{build.element} · Level {value(build.level)} · C{value(build.constellation)} · Friendship {value(build.friendship)}</p></div></section>
-    <section className="section-block"><SectionTitle eyebrow="COMBAT STATS" title="Character attributes" /><Stats stats={build.stats} /></section>
-    <section className="section-block"><SectionTitle eyebrow="EQUIPMENT" title="Weapon" />{build.weapon ? <><Equipment item={build.weapon} title={`Refinement ${value(build.weapon.refinement)}`} /></> : <p>No equipped weapon was shared.</p>}</section>
-    <section className="section-block"><SectionTitle eyebrow="EQUIPMENT" title="Artifacts" /><div className="equipped-artifact-grid">{build.artifacts.map((artifact, index) => <div key={index}><Equipment item={artifact} title={artifact.slot || 'Artifact'} />{artifact.set && <p className="muted">{artifact.set}</p>}</div>)}</div>{!build.artifacts.length && <p>No equipped artifacts were shared.</p>}</section>
-    <section className="section-block"><SectionTitle eyebrow="TALENTS" title="Skills & abilities" /><div className="talent-detail-grid">{build.skills.map((skill, index) => <article className="talent-detail" key={index}><AsyncImage src={skill.icon} className="ability-icon" alt="" fallback={<AssetPlaceholder kind="talent" />} /><div><h3>{skill.name}</h3><strong>Level {value(skill.level)}</strong><p>{skill.description || 'Description unavailable.'}</p></div></article>)}</div>{!build.skills.length && <p>No talent details were shared.</p>}</section>
-    <section className="section-block"><SectionTitle eyebrow="PROGRESSION" title="Constellations" /><div className="constellation-list">{build.constellations.map((entry, index) => <article className="constellation-row" key={index}><div className="constellation-marker"><AsyncImage src={entry.icon} className="ability-icon" alt="" fallback={<AssetPlaceholder kind="talent" />} /><span>C{index + 1}</span></div><div><h3>{entry.name}</h3><strong>{entry.unlocked ? 'Unlocked' : 'Locked'}</strong><p>{entry.description || 'Description unavailable.'}</p></div></article>)}</div>{!build.constellations.length && <p>No constellation details were shared.</p>}</section>
-  </>;
-}
 function AdvancedConnectionForm({ busy, onConnect }: { busy: boolean; onConnect: (input: object) => Promise<void> }) {
   const [accountId, setAccountId] = useState('');
   const [token, setToken] = useState('');
@@ -194,7 +179,7 @@ export function MyProfilePage() {
         <section className="section-block"><SectionTitle eyebrow="MY CHARACTERS" title="Owned characters" description="Open a character to view their equipped stats, weapons, artifacts, talents, and constellations when shared by HoYoLAB." /><input className="search-input" type="search" aria-label="Search owned characters" placeholder="Search your characters" value={search} onChange={(event) => setSearch(event.target.value)} /><div className="showcase-grid connected-profile-roster">{characters.map((entry) => <OwnedCharacterCard key={entry.id} entry={entry} uid={profile.role.uid} />)}</div>{!characters.length && <p className="empty-state">{profile.characters.length ? 'No characters match your search.' : 'Owned character details are unavailable from HoYoLAB.'}</p>}</section>
         <section className="section-block"><SectionTitle eyebrow="EXPLORATION" title="Your journey through Teyvat" /><div className="connected-profile-exploration">{profile.exploration.map((entry, index) => <article className="panel" key={index}><AsyncImage src={entry.icons?.length ? entry.icons : entry.icon} alt="" className="talent-icon" fallback={<AssetPlaceholder kind="material" />} /><div><h3>{entry.name}</h3><strong>{entry.percentage === null ? '—' : `${entry.percentage}%`}</strong><p>Level {value(entry.level)}</p></div></article>)}</div><div className="profile-metrics profile-metrics--overview">{[...profile.stats.chests, { label: 'Waypoints', value: profile.stats.waypoints }, { label: 'Domains', value: profile.stats.domains }].map((entry) => <article key={entry.label}><span>{entry.label}</span><strong>{value(entry.value)}</strong></article>)}</div></section>
       </>}
-      {characterId && <><Link to={`/me/${role?.uid ?? ''}`} className="button secondary"><ArrowLeft size={15} />Back to My Profile</Link>{buildError ? <div role="alert" className="error-box">{buildError}</div> : build ? <ConnectedBuild build={{ ...build, ...enrich(build) }} /> : profile && <div role="status" className="loading">Loading your equipped build…</div>}</>}
+      {characterId && <><Link to={`/me/${role?.uid ?? ''}`} className="button secondary"><ArrowLeft size={15} />Back to My Profile</Link>{buildError ? <div role="alert" className="error-box">{buildError}</div> : build ? <ConnectedBuild key={`${role?.uid}:${build.id}`} build={{ ...build, ...enrich(build) }} characters={enrichedCharacters} onCharacterChange={(id) => navigate(`/me/${role?.uid}/characters/${id}`)} /> : profile && <div role="status" className="loading">Loading your equipped build…</div>}</>}
       <p className="muted connected-profile-privacy">Your account information is not saved in browser storage or sent to AI Paimon. Disconnect removes this connection from our server. Some HoYoLAB features may be unavailable; this page does not expose every part of your game account.</p>
     </>}
   </div>;
