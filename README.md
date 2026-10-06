@@ -392,6 +392,25 @@ team, widget, or checklist preferences. Storage failures retain a fallback path.
 
 ## Browser checks
 
+### Home and shared layout polish
+
+Home keeps the existing Teyvat artwork and colors, with equal-sized peer cards,
+bottom-aligned card actions, and direct shortcuts to the player tools. News
+loading, unavailable, and loaded states reserve the same space at each breakpoint.
+Previous/next, pause/resume, and retry controls work without extra feed requests
+for navigation. Rotation pauses during hover/focus, in hidden tabs, and for
+reduced-motion preferences. The Home stylesheet loads only with its route.
+
+Shared geometry standardizes 44px controls, peer-card gaps, long-name wrapping,
+mobile callouts, and sticky-header offsets without forcing reading panels or
+expanded descriptions into fixed heights. Supporting browsers align desktop
+comparison attributes with CSS subgrid; others retain the existing column layout.
+
+Team saves now compact each occupied slot and its assigned role together, so
+removing an earlier/middle slot cannot mislabel another character. Existing local
+teams are left untouched: resave any team whose roles were saved incorrectly by
+an older version, since the old record does not retain the original slot positions.
+
 ```bash
 npm run test:e2e
 ```

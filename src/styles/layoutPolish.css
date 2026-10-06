@@ -1,0 +1,76 @@
+/* Shared geometry, not a theme replacement. Match peers without fixing the
+   height of reading panels, expanded abilities, charts, or account artwork. */
+:root { --app-header-height: 72px; --control-height: 44px; --peer-gap: 14px; }
+.page, .page > *, .section-title > div { min-width: 0; }
+.section-title { gap: 16px; }
+.section-title > .button { flex-shrink: 0; }
+.page .button { min-height: var(--control-height); line-height: 1.35; }
+.page .button > svg, .page .source-button > svg { flex-shrink: 0; }
+.page .icon-button { width: var(--control-height); height: var(--control-height); flex: 0 0 var(--control-height); }
+.page .source-button { min-height: var(--control-height); gap: 10px; line-height: 1.45; }
+.page :is(.toolbar, .lookup-form, .tracker-toolbar) :is(input, select), .compare-picker select, .team-editor input, .team-role-select { min-height: var(--control-height); min-width: 0; }
+.page :is(.toolbar, .lookup-form) { align-items: stretch; }
+.page :is(.selected-character-list, .planner-filters, .tabs, .player-tabs) button { min-height: var(--control-height); }
+.page :is(.feature-grid, .source-grid, .saved-team-grid, .entity-grid, .compare-grid, .team-insight-grid, .recommend-grid) { align-items: stretch; gap: var(--peer-gap); }
+.page :is(.feature-grid, .source-grid, .saved-team-grid, .entity-grid, .compare-grid, .team-insight-grid, .recommend-grid) > * { min-width: 0; }
+.feature-card, .source-card, .saved-team { display: flex; flex-direction: column; }
+.feature-card > span, .source-card > .source-button { margin-top: auto; }
+.source-card h3, .saved-team h3 { line-height: 1.35; overflow-wrap: anywhere; }
+.source-card p { flex: 1; }
+.saved-team-head { gap: 12px; min-height: 44px; }
+.saved-team-head > div { min-width: 0; }
+.saved-team > p { overflow-wrap: anywhere; }
+.team-slots { align-items: stretch; }
+.team-slot { min-width: 0; min-height: 138px; }
+.team-slot > div:not(.slot-empty) { flex: 1; min-width: 0; }
+.team-slot > img, .team-slot > .image-fallback { flex-shrink: 0; }
+.team-slot strong { overflow-wrap: anywhere; line-height: 1.4; }
+.team-insight-grid article { grid-template-rows: 20px auto 1fr; align-content: start; }
+.team-editor > div, .team-editor input, .team-editor textarea { min-width: 0; width: 100%; }
+.team-editor textarea { line-height: 1.5; }
+.team-editor > .button { align-self: end; }
+.character-card { display: flex; flex-direction: column; min-width: 0; }
+.character-card__image-wrap { flex-shrink: 0; width: 100%; }
+.character-card__body { flex: 1; display: flex; flex-direction: column; width: 100%; }
+.character-card__body .eyebrow { min-height: 2.8em; line-height: 1.4; }
+.character-card__body h3 { min-height: 2.7em; line-height: 1.35; overflow-wrap: anywhere; }
+.character-card__body > .muted { margin-top: auto; }
+.entity-card { min-width: 0; height: 100%; }
+.entity-card strong { min-height: 2.7em; line-height: 1.35; overflow-wrap: anywhere; }
+.compare-character-header { min-height: 96px; }
+.compare-character-header h2 { overflow-wrap: anywhere; }
+.compare-section { min-height: 64px; }
+.compare-stat-grid > div, .showcase-stats > div { min-width: 0; }
+.compare-stat-grid strong, .showcase-stats dd { overflow-wrap: anywhere; }
+.map-embed-head { flex-wrap: wrap; gap: 12px; }
+.map-embed-head > div { min-width: 0; }
+.map-embed-head h3 { overflow-wrap: anywhere; }
+.sticky-toolbar { top: calc(var(--app-header-height) + 10px); }
+.connected-profile-page .connected-build-tabs { top: var(--app-header-height); scroll-margin-top: var(--app-header-height); }
+.connected-profile-page :is(.connected-build, .profile-section-anchor) { scroll-margin-top: calc(var(--app-header-height) + 12px); }
+/* Share comparison row tracks so different amounts of text do not shift the
+   same attribute to different vertical positions. Older browsers retain the
+   existing, readable stacked-column layout. */
+@supports (grid-template-rows: subgrid) {
+  @media (min-width: 901px) {
+    .compare-grid:has(.compare-character-header) { grid-auto-flow: column; grid-template-rows: repeat(7, auto); row-gap: 0; }
+    .compare-grid:has(.compare-character-header) > .compare-column { grid-row: span 7; }
+    .compare-grid:has(.compare-character-header) > .compare-column:not(.compare-column--empty) { display: grid; grid-template-rows: subgrid; }
+  }
+}
+@media (max-width: 1100px) {
+  .team-slots { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+@media (max-width: 640px) {
+  :root { --app-header-height: 60px; --peer-gap: 12px; }
+  .page :is(.toolbar, .lookup-form, .tracker-toolbar) :is(input, select), .compare-picker select, .team-editor input, .team-editor textarea, .team-role-select { font-size: 16px; }
+  .page .callout { flex-direction: column; flex-wrap: nowrap; align-items: stretch; gap: 14px; }
+  .page .callout > div { min-width: 0; flex: initial; width: 100%; }
+  .page .callout > .button { width: 100%; }
+  .team-slots { grid-template-columns: minmax(0, 1fr); }
+  .team-slot { min-height: 110px; }
+  .team-editor > .button { width: 100%; }
+  .source-grid { grid-template-columns: minmax(0, 1fr); }
+  .source-card { min-height: 200px; }
+  .map-embed-head > .source-button { width: 100%; }
+}

@@ -67,7 +67,8 @@ export function TeamsPage() {
     setRoles((current) => current.map((role, roleIndex) => roleIndex === index ? '' : role));
   }
   function saveTeam() {
-    const team: SavedTeam = { name: name.trim() || 'My Team', note: note.trim(), members: teamCharacters.map((character) => character.id), roles };
+    // Compact members and roles together using their original slot indices.
+    const team: SavedTeam = { name: name.trim() || 'My Team', note: note.trim(), members: teamCharacters.map((character) => character.id), roles: selected.flatMap((character, index) => character ? [roles[index]] : []) };
     if (!team.members.length) return;
     const next = [team, ...saved].slice(0, 20);
     setSaved(next);
