@@ -75,3 +75,25 @@ test('connected talent and constellation descriptions remove game links, decode 
   expect(connectedGameText(null)).toBe('');
   expect(connectedGameText('&lt;img src=x onerror=alert(1)&gt;Safe&#xD800;')).toBe('Safe');
 });
+
+test('regional covers and offerings are bounded display-only fields with the same official image restrictions', () => {
+  const cover = 'https://upload-os-bbs.hoyolab.com/region-cover.png';
+  const background = 'https://upload-os-bbs.hoyolab.com/region-background.png';
+  const source = { world_explorations: [{ name: 'Nod-Krai', cover: `${cover}?x-oss-process=image/resize,w_100`, background_image: background, exploration_percentage: 0, level: 0, offerings: [
+    { name: '{LINK#N1}Meeting Place{/LINK}', icon, level: 0, token: 'do-not-return' },
+    { name: 'Unsafe image', icon: 'https://evil.test/tracker.png', level: -1 },
+    { name: 'Signed image', icon: `${icon}?token=private`, level: 10 },
+    { name: '', icon, level: 2 },
+  ], token: 'do-not-return' }, { name: 'Unsafe cover', cover: 'https://evil.test/tracker.png', background_image: `${background}?token=private`, offerings: null }] };
+  const before = structuredClone(source);
+  const result = normalizeProfile(role, source, null, null, 1, []);
+  expect(result.exploration[0]).toMatchObject({ artwork: [cover, background], offerings: [{ name: 'Meeting Place', icon, level: 0 }, { name: 'Unsafe image', icon: '', level: null }, { name: 'Signed image', icon: '', level: 10 }] });
+  expect(result.exploration[1]).toMatchObject({ artwork: [], offerings: [] });
+  expect(JSON.stringify(result)).not.toContain('do-not-return');
+  expect(JSON.stringify(result)).not.toContain('evil.test');
+  expect(JSON.stringify(result)).not.toContain('token=private');
+  expect(source).toEqual(before);
+  const bounded = normalizeProfile(role, { world_explorations: Array.from({ length: 100 }, () => ({ name: 'Region', offerings: Array.from({ length: 100 }, () => ({ name: 'Offering', icon, level: 1 })) })) }, null, null, 1, []);
+  expect(bounded.exploration).toHaveLength(40);
+  expect(bounded.exploration[0].offerings).toHaveLength(12);
+});

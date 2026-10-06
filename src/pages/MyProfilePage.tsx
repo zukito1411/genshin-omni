@@ -1,30 +1,18 @@
-import { memo, useDeferredValue, useEffect, useMemo, useRef, useState, type FormEvent } from 'react';
+import { useEffect, useMemo, useRef, useState, type FormEvent } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
-import { ArrowLeft, ArrowRight, Clock, Droplets, ExternalLink, LogOut, RefreshCw, ShieldCheck, Trophy } from 'lucide-react';
+import { ArrowLeft, ExternalLink, LogOut, RefreshCw, ShieldCheck } from 'lucide-react';
 import { SectionTitle } from '../components/SectionTitle';
-import { ProfileImage as AsyncImage } from '../components/ProfileImage';
-import { AssetPlaceholder } from '../components/AssetPlaceholder';
 import { HoYoLabLoginForm } from '../components/HoYoLabLoginForm';
-import { ConnectedProfileBanner } from '../components/ConnectedProfileBanner';
+import { ConnectedProfileOverview } from '../components/ConnectedProfileOverview';
 import { ConnectedBuild } from '../components/ConnectedBuild';
-import { ResinAlarm } from '../components/ResinAlarm';
 import { localResinAlarms } from '../utils/localResinAlarms';
 import { usePaimonContext } from '../components/PaimonCompanion';
 import { useCharacters } from '../hooks/useCharacters';
 import { characterImageSources } from '../api/genshinDev';
 import { MyProfileError, myProfileRequest } from '../api/myProfile';
-import type { PrivateBuild, PrivateProfile, ProfileSession } from '../types/myProfile';
+import type { PrivateBuild, PrivateProfile, ProfileRosterView, ProfileSession } from '../types/myProfile';
+import '../styles/myProfile.css';
 
-const value = (number: number | null | undefined) => number === null || number === undefined ? '—' : number.toLocaleString();
-function duration(seconds: number | null) {
-  if (seconds === null) return 'Time unavailable';
-  if (seconds === 0) return 'Ready';
-  const minutes = Math.ceil(seconds / 60);
-  return minutes >= 60 ? `${Math.floor(minutes / 60)}h ${minutes % 60}m` : `${minutes}m`;
-}
-const OwnedCharacterCard = memo(function OwnedCharacterCard({ entry, uid }: { entry: PrivateProfile['characters'][number]; uid: string }) {
-  return <Link className="showcase-card showcase-card--link" to={`/me/${uid}/characters/${entry.id}`}><AsyncImage src={entry.icon} alt="" className="showcase-card__image" fallback={<AssetPlaceholder kind="character" />} /><div><strong>{entry.name}</strong><span>{entry.element} · Level {value(entry.level)} · C{value(entry.constellation)}</span><span>View equipped build</span></div><ArrowRight size={17} /></Link>;
-});
 function AdvancedConnectionForm({ busy, onConnect }: { busy: boolean; onConnect: (input: object) => Promise<void> }) {
   const [accountId, setAccountId] = useState('');
   const [token, setToken] = useState('');
@@ -77,8 +65,7 @@ export function MyProfilePage() {
   const [busy, setBusy] = useState(false);
   const [loading, setLoading] = useState(false);
   const [refresh, setRefresh] = useState(0);
-  const [search, setSearch] = useState('');
-  const deferredSearch = useDeferredValue(search);
+  const [rosterView, setRosterView] = useState<ProfileRosterView>({ search: '', element: '', sort: 'default' });
   const { allCharacters } = useCharacters('', Boolean(profile?.characters.some((entry) => entry.name === 'Name unavailable' || !entry.icon || !entry.element)));
   const catalog = useMemo(() => new Map(allCharacters.map((entry) => [String(entry.gameId ?? entry.id), entry])), [allCharacters]);
   const enrich = (entry: PrivateProfile['characters'][number]) => {
@@ -105,7 +92,8 @@ export function MyProfilePage() {
   }, [refresh]);
   useEffect(() => {
     const controller = new AbortController();
-    setProfile(null); setBuild(null); setBuildError(''); setSearch('');
+    setProfile(null); setBuild(null); setBuildError('');
+    setRosterView({ search: '', element: '', sort: 'default' });
     if (busy || !session?.connected || !role || !session.csrf) { setLoading(false); return () => controller.abort(); }
     setLoading(true);
     void myProfileRequest<{ profile: PrivateProfile }>('POST', { action: 'profile', uid: role.uid }, session.csrf, controller.signal).then((result) => {
@@ -157,30 +145,16 @@ export function MyProfilePage() {
     catch (reason) { if (!controller.signal.aborted) setError(reason instanceof Error ? reason.message : 'Disconnect failed. Please try again.'); }
     finally { if (!controller.signal.aborted) setBusy(false); }
   }
-  const characters = useMemo(() => enrichedCharacters.filter((entry) => entry.name.toLowerCase().includes(deferredSearch.toLowerCase())), [enrichedCharacters, deferredSearch]);
-  const notes = profile?.notes;
   return <div className="connected-profile-page">
-    <SectionTitle eyebrow="MY ACCOUNT" title="My Profile" description="Your connected Genshin account, progress, and daily notes. Private account information stays out of public UID Search." action={<Link to="/profile" className="button secondary">UID Search</Link>} />
+    <SectionTitle eyebrow="MY ACCOUNT" title="My Profile" description="Your adventures, builds, and daily progress in one place." />
     {error && <div role="alert" className="error-box">{error}</div>}
     {!session ? <div className="loading" role="status">Checking your connection…</div> : !session.available ? <section className="panel connected-profile-connect"><div className="connected-profile-intro"><ShieldCheck size={32} /><div><h3>Account connection is not available yet</h3><p>This site is not ready to connect HoYoLAB accounts. No session information is requested or saved. Public UID Search and your saved plans still work.</p></div></div><button type="button" className="button secondary" onClick={() => setRefresh((previous) => previous + 1)}>Check again</button></section> : !session.connected ? <AccountConnection busy={busy} directLogin={session.directLogin !== false} onConnect={connect} onConnected={acceptConnection} /> : <>
       <section className="panel connected-profile-toolbar"><label>Your Genshin account<select value={role?.uid ?? ''} onChange={(event) => navigate(`/me/${event.target.value}`)} disabled={busy}><option value="" disabled>Select an account</option>{session.roles?.map((entry) => <option key={entry.uid} value={entry.uid}>{entry.nickname} · {entry.server} · {entry.uid}</option>)}</select></label><div><button type="button" className="button secondary" onClick={() => setRefresh((previous) => previous + 1)} disabled={busy || loading}><RefreshCw size={15} />Refresh</button><button type="button" className="button secondary" onClick={() => void disconnect()} disabled={busy}><LogOut size={15} />{busy ? 'Disconnecting…' : 'Disconnect'}</button></div></section>
       {!role && <div className="empty-state">This UID is not connected to your HoYoLAB account. Choose one of your accounts above.</div>}
       {loading && <div className="detail-loading" role="status" aria-label="Loading your profile"><div className="skeleton-hero" /><div className="skeleton-line" /></div>}
-      {profile && !characterId && <>
-        <ConnectedProfileBanner key={profile.role.uid} role={profile.role} csrf={session.csrf ?? ''} onExpired={() => { setProfile(null); setBuild(null); setSession({ available: true, connected: false }); setError('Your connection has expired. Please connect your HoYoLAB account again.'); }} />
-        <p className="muted connected-profile-updated"><Clock size={14} />Last updated {new Date(profile.updatedAt).toLocaleString()}. Values reflect that reading, not a live game connection.</p>
-        {profile.unavailable.length > 0 && <p role="status" className="muted">Some details are unavailable. Enable Real-Time Notes in HoYoLAB for daily tasks, and try refreshing later. Available information is shown below.</p>}
-        <section className="profile-metrics profile-metrics--overview" aria-label="My account progress">{[['Achievements', profile.stats.achievements], ['Days active', profile.stats.daysActive], ['Characters', profile.stats.characters], ['Spiral Abyss', profile.stats.abyss], ['Imaginarium Theater', profile.stats.theaterAct === null || profile.stats.theaterAct === undefined ? null : `Act ${profile.stats.theaterAct}`], ['Stygian Onslaught', profile.stats.stygian]].map(([label, amount]) => <article key={String(label)}><Trophy size={20} /><span>{label}</span><strong>{typeof amount === 'number' ? value(amount) : amount ?? '—'}</strong></article>)}</section>
-        <section className="section-block"><SectionTitle eyebrow="REAL-TIME NOTES" title="Your daily adventure" /><div className="connected-profile-daily">
-          <article className="panel"><div className="eyebrow"><Droplets size={16} />ORIGINAL RESIN</div><h2>{value(notes?.resin)} / {value(notes?.maxResin)}</h2><p>{notes?.resin !== null && notes?.resin !== undefined ? `Full recovery: ${duration(notes.recoverySeconds)}` : 'Enable Real-Time Notes in HoYoLAB to view resin.'}</p>{notes?.resin !== null && notes?.resin !== undefined && Boolean(notes.maxResin) && <ResinAlarm key={profile.role.uid} profile={profile} csrf={session.csrf ?? ''} expiresAt={session.expiresAt} onBusyChange={(active) => { alarmSetup.current = active; }} />}</article>
-          <article className="panel"><div className="eyebrow">DAILY COMMISSIONS</div><h2>{value(notes?.commissions)} / {value(notes?.maxCommissions)}</h2><p>{notes?.commissionRewardClaimed === null || !notes ? 'Reward status unavailable' : notes.commissionRewardClaimed ? 'Daily reward claimed' : 'Daily reward not claimed'}</p></article>
-          <article className="panel"><div className="eyebrow">REALM CURRENCY</div><h2>{value(notes?.realmCurrency)} / {value(notes?.maxRealmCurrency)}</h2><p>Your Serenitea Pot currency at the last refresh.</p></article>
-        </div>{Boolean(notes?.expeditions.length) && <div className="connected-profile-expeditions">{notes?.expeditions.map((entry, index) => <article className="panel" key={index}><AsyncImage src={entry.icon} alt="" className="talent-icon" fallback={<AssetPlaceholder kind="character" />} /><strong>Expedition {index + 1}</strong><span>{entry.status === 'Finished' ? 'Ready to collect' : duration(entry.remainingSeconds)}</span></article>)}</div>}</section>
-        <section className="section-block"><SectionTitle eyebrow="MY CHARACTERS" title="Owned characters" description="Open a character to view their equipped stats, weapons, artifacts, talents, and constellations when shared by HoYoLAB." /><input className="search-input" type="search" aria-label="Search owned characters" placeholder="Search your characters" value={search} onChange={(event) => setSearch(event.target.value)} /><div className="showcase-grid connected-profile-roster">{characters.map((entry) => <OwnedCharacterCard key={entry.id} entry={entry} uid={profile.role.uid} />)}</div>{!characters.length && <p className="empty-state">{profile.characters.length ? 'No characters match your search.' : 'Owned character details are unavailable from HoYoLAB.'}</p>}</section>
-        <section className="section-block"><SectionTitle eyebrow="EXPLORATION" title="Your journey through Teyvat" /><div className="connected-profile-exploration">{profile.exploration.map((entry, index) => <article className="panel" key={index}><AsyncImage src={entry.icons?.length ? entry.icons : entry.icon} alt="" className="talent-icon" fallback={<AssetPlaceholder kind="material" />} /><div><h3>{entry.name}</h3><strong>{entry.percentage === null ? '—' : `${entry.percentage}%`}</strong><p>Level {value(entry.level)}</p></div></article>)}</div><div className="profile-metrics profile-metrics--overview">{[...profile.stats.chests, { label: 'Waypoints', value: profile.stats.waypoints }, { label: 'Domains', value: profile.stats.domains }].map((entry) => <article key={entry.label}><span>{entry.label}</span><strong>{value(entry.value)}</strong></article>)}</div></section>
-      </>}
+      {profile && !characterId && <ConnectedProfileOverview key={profile.role.uid} profile={profile} characters={enrichedCharacters} rosterView={rosterView} onRosterViewChange={setRosterView} csrf={session.csrf ?? ''} expiresAt={session.expiresAt} onAlarmBusyChange={(active) => { alarmSetup.current = active; }} onExpired={() => { setProfile(null); setBuild(null); setSession({ available: true, connected: false }); setError('Your connection has expired. Please connect your HoYoLAB account again.'); }} />}
       {characterId && <><Link to={`/me/${role?.uid ?? ''}`} className="button secondary"><ArrowLeft size={15} />Back to My Profile</Link>{buildError ? <div role="alert" className="error-box">{buildError}</div> : build ? <ConnectedBuild key={`${role?.uid}:${build.id}`} build={{ ...build, ...enrich(build) }} characters={enrichedCharacters} onCharacterChange={(id) => navigate(`/me/${role?.uid}/characters/${id}`)} /> : profile && <div role="status" className="loading">Loading your equipped build…</div>}</>}
-      <p className="muted connected-profile-privacy">Your account information is not saved in browser storage or sent to AI Paimon. Disconnect removes this connection from our server. Some HoYoLAB features may be unavailable; this page does not expose every part of your game account.</p>
+      <details className="connected-profile-privacy"><summary><ShieldCheck size={15} aria-hidden="true" />Connection & privacy</summary><p>Your account information is not saved in browser storage or sent to AI Paimon. Disconnect removes this connection from our server. Some HoYoLAB features may be unavailable; this page does not expose every part of your game account.</p></details>
     </>}
   </div>;
 }

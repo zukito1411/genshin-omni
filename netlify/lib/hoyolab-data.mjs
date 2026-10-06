@@ -44,7 +44,9 @@ export function normalizeProfile(role, index, notes, characters, updatedAt, unav
     } : null,
     exploration: list(index?.world_explorations, 40).map((area) => {
       const icons = [...new Set([area?.icon, area?.inner_icon, area?.cover, area?.background_image].map(imageUrl).filter(Boolean))];
-      return { name: text(area?.name) || 'Area name unavailable', icon: icons[0] ?? '', icons, percentage: number(area?.exploration_percentage, 10000) === null ? null : area.exploration_percentage / 10, level: number(area?.level, 100) };
+      const artwork = [...new Set([area?.cover, area?.background_image].map(imageUrl).filter(Boolean))];
+      const offerings = list(area?.offerings, 12).map((entry) => ({ name: text(entry?.name), icon: imageUrl(entry?.icon), level: number(entry?.level, 1000) })).filter((entry) => entry.name);
+      return { name: text(area?.name) || 'Area name unavailable', icon: icons[0] ?? '', icons, artwork, offerings, percentage: number(area?.exploration_percentage, 10000) === null ? null : area.exploration_percentage / 10, level: number(area?.level, 100) };
     }),
     characters: list(characters?.list).filter((entry) => number(entry?.id ?? entry?.avatar_id) !== null).map(normalizeCharacter),
   };

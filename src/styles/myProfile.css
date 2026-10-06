@@ -1,0 +1,131 @@
+/* Private-page presentation only. No global or public UID layout overrides. */
+.connected-profile-page > .section-title { margin-bottom: 16px; }
+.connected-profile-page > .section-title p { max-width: 540px; }
+.connected-profile-page .connected-profile-toolbar { padding: 12px; gap: 10px; }
+.connected-profile-page .connected-profile-toolbar label { font-size: 12px; }
+.connected-profile-page .connected-profile-toolbar button { min-height: 44px; font-size: 13px; }
+.connected-profile-page .connected-profile-toolbar select { text-overflow: ellipsis; }
+.connected-profile-page .connected-profile-banner { margin-top: 16px; min-height: 200px; }
+.connected-profile-page .profile-banner__content { min-height: 200px; padding: 26px; gap: 20px; }
+.connected-profile-page .profile-banner::after { background: linear-gradient(90deg, rgba(6,15,26,.9), rgba(6,15,26,.65) 60%, rgba(6,15,26,.24)), linear-gradient(0deg, rgba(6,15,26,.48), transparent); }
+.connected-profile-banner__meta { display: flex; flex-wrap: wrap; gap: 6px 16px; font-size: 13px; }
+.connected-profile-banner__badges { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+.connected-profile-banner__badges .profile-uid { min-height: 36px; font: inherit; font-size: 12px; cursor: pointer; }
+.connected-profile-banner__badges .pill { min-height: 36px; font-size: 11px; }
+.profile-copy-status { display: block; min-height: 16px; padding-top: 4px; font-size: 11px; color: var(--gold); }
+.connected-profile-page .connected-profile-updated { margin: 12px 0; font-size: 12px; line-height: 1.5; }
+.connected-profile-updated > svg { flex-shrink: 0; }
+.profile-availability-note { font-size: 12px; line-height: 1.6; padding: 12px; border: 1px solid var(--line); border-radius: 10px; }
+.profile-section-anchor { scroll-margin-top: 82px; outline: none; }
+.profile-section-shortcuts { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 8px; margin: 16px 0; }
+.profile-section-shortcuts button { min-height: 44px; padding: 10px; display: flex; justify-content: center; align-items: center; gap: 8px; border: 1px solid var(--line); border-radius: 10px; background: var(--panel-2); color: var(--muted); font-size: 12px; cursor: pointer; }
+.profile-section-shortcuts button > svg { flex-shrink: 0; }
+.profile-section-shortcuts button:hover { color: var(--gold); border-color: rgba(232,199,125,.4); }
+.connected-profile-page button:focus-visible, .connected-profile-page select:focus-visible, .profile-owned-card:focus-visible, .connected-profile-privacy summary:focus-visible, .profile-region-card__details summary:focus-visible { outline: 2px solid var(--gold); outline-offset: 2px; }
+.connected-profile-page .profile-account-metrics { grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; }
+.connected-profile-page .profile-account-metrics article { min-width: 0; min-height: 92px; padding: 14px; background: linear-gradient(135deg, rgba(155,185,255,.07), rgba(232,199,125,.025)); }
+.connected-profile-page .profile-account-metrics article > svg { top: 14px; right: 12px; }
+.connected-profile-page .profile-account-metrics span { padding-right: 24px; overflow-wrap: anywhere; font-size: 12px; }
+.connected-profile-page .profile-account-metrics strong { padding-right: 0; font-size: 23px; overflow-wrap: anywhere; }
+.connected-profile-page .connected-profile-daily { grid-template-columns: 2fr 1fr 1fr; align-items: start; }
+.connected-profile-page .connected-profile-daily > article { padding: 18px; }
+.connected-profile-page .connected-profile-daily h2 { font-size: clamp(21px, 3vw, 29px); margin: 12px 0; }
+.connected-profile-page .connected-profile-daily .eyebrow { letter-spacing: .08em; font-size: 11px; line-height: 1.5; }
+.connected-profile-page .connected-profile-daily .eyebrow > svg { flex-shrink: 0; }
+.profile-capacity { display: block; width: 100%; height: 6px; margin: 12px 0; border: 0; border-radius: 8px; overflow: hidden; appearance: none; background: rgba(155,185,255,.13); accent-color: var(--gold); }
+.profile-capacity::-webkit-progress-bar { background: rgba(155,185,255,.13); border-radius: 8px; }
+.profile-capacity::-webkit-progress-value { background: var(--gold); border-radius: 8px; }
+.profile-capacity::-moz-progress-bar { background: var(--gold); border-radius: 8px; }
+.connected-profile-page .connected-profile-expeditions { grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); }
+.connected-profile-page .connected-profile-expeditions article { display: flex; align-items: center; gap: 12px; padding: 12px; min-width: 0; }
+.connected-profile-expeditions article > div { min-width: 0; }
+.connected-profile-expeditions strong, .connected-profile-expeditions span { display: block; font-size: 12px; line-height: 1.5; }
+.connected-profile-page .connected-profile-expeditions .talent-icon { flex: 0 0 36px; width: 36px; height: 36px; }
+.profile-roster-controls { display: grid; grid-template-columns: minmax(180px, 2fr) repeat(2, minmax(130px, 1fr)); gap: 12px; align-items: end; }
+.profile-roster-controls label { display: grid; min-width: 0; gap: 6px; font-size: 12px; color: var(--muted); }
+.profile-roster-controls select { width: 100%; min-width: 0; min-height: 44px; padding: 10px; border: 1px solid var(--line); border-radius: 9px; background: var(--bg); color: var(--text); font: inherit; }
+.profile-roster-controls .profile-roster-search { position: relative; display: block; }
+.profile-roster-search > svg { position: absolute; left: 12px; top: 50%; transform: translateY(-50%); pointer-events: none; }
+.profile-roster-search .search-input { width: 100%; min-height: 44px; padding-left: 38px; margin: 0; }
+.profile-roster-results { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 8px; align-items: center; min-height: 44px; }
+.profile-roster-results p { font-size: 12px; margin: 8px 0; }
+.profile-roster-results button { min-height: 44px; font-size: 12px; }
+.connected-profile-page .connected-profile-roster { grid-template-columns: repeat(auto-fill, minmax(215px, 1fr)); margin-top: 0; }
+.connected-profile-page .profile-owned-card { min-width: 0; min-height: 102px; padding: 14px; gap: 12px; border-top-color: var(--rarity-color, var(--line)); }
+.profile-owned-card > div { min-width: 0; }
+.profile-owned-card strong { overflow-wrap: anywhere; line-height: 1.4; }
+.profile-owned-card span { line-height: 1.5; }
+.connected-profile-page .profile-owned-card__hint { display: flex; align-items: center; gap: 6px; color: var(--gold); font-size: 11px; }
+.connected-profile-page .connected-profile-exploration { grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); }
+.connected-profile-page .profile-region-card { display: block; position: relative; isolation: isolate; overflow: hidden; min-width: 0; padding: 18px; }
+.profile-region-card__artwork { position: absolute; inset: 0; z-index: -2; width: 100%; height: 100%; object-fit: cover; }
+.profile-region-card::after { content: ''; position: absolute; inset: 0; z-index: -1; background: linear-gradient(100deg, rgba(7,17,28,.92), rgba(7,17,28,.74)); pointer-events: none; }
+.profile-region-card__head { display: flex; gap: 12px; align-items: center; }
+.profile-region-card__head .talent-icon { flex: 0 0 38px; width: 38px; height: 38px; }
+.profile-region-card__head > div { min-width: 0; flex: 1; }
+.connected-profile-page .profile-region-card__head h3 { font-size: 17px; margin: 0 0 4px; line-height: 1.4; }
+.profile-region-card__head span { font-size: 11px; }
+.profile-region-card__head > strong { flex-shrink: 0; color: var(--gold); font-size: 19px; }
+.connected-profile-page .profile-region-card__level { font-size: 12px; margin-bottom: 0; }
+.profile-region-card__details { margin-top: 10px; font-size: 12px; }
+.profile-region-card__details summary { display: flex; align-items: center; justify-content: space-between; min-height: 44px; list-style: none; cursor: pointer; color: var(--gold); }
+.profile-region-card__details summary::-webkit-details-marker { display: none; }
+.profile-region-card__details[open] summary svg { transform: rotate(180deg); }
+.profile-region-card__details ul { list-style: none; margin: 0; padding: 0; }
+.profile-region-card__details li { display: flex; gap: 8px; align-items: center; padding: 10px 0; border-top: 1px solid var(--line); }
+.profile-region-card__details li .talent-icon { width: 28px; height: 28px; flex: 0 0 28px; }
+.profile-region-card__details li > span { flex: 1; min-width: 0; overflow-wrap: anywhere; }
+.profile-region-card__details li > strong { flex-shrink: 0; }
+.connected-profile-page .profile-chest-metrics { grid-template-columns: repeat(auto-fit, minmax(145px, 1fr)); }
+.connected-profile-page .profile-chest-metrics article { min-width: 0; padding: 14px; }
+.connected-profile-page .profile-chest-metrics span { padding-right: 0; overflow-wrap: anywhere; }
+.connected-profile-page .connected-profile-privacy { padding: 12px 14px; border: 1px solid var(--line); border-radius: 12px; }
+.connected-profile-privacy summary { display: flex; align-items: center; gap: 8px; min-height: 44px; cursor: pointer; color: var(--muted); }
+.connected-profile-privacy p { margin: 8px 0; }
+@media (max-width: 900px) {
+  .connected-profile-page .connected-profile-daily { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .profile-resin-card { grid-column: 1 / -1; }
+}
+@media (max-width: 700px) {
+  .profile-section-anchor { scroll-margin-top: 72px; }
+  .connected-profile-page .connected-profile-toolbar { display: grid; grid-template-columns: minmax(0, 1fr); }
+  .connected-profile-page .connected-profile-toolbar > div { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .connected-profile-page .connected-profile-banner { min-height: 185px; }
+  .connected-profile-page .profile-banner__content { min-height: 185px; padding: 20px 16px; gap: 14px; flex-wrap: nowrap; align-items: flex-start; }
+  .connected-profile-page .profile-avatar-frame { flex: 0 0 64px; width: 64px; height: 64px; margin-top: 22px; }
+  .connected-profile-page .profile-banner__copy { flex: 1; min-width: 0; }
+  .connected-profile-page .profile-banner__copy .eyebrow { font-size: 9px; letter-spacing: .13em; }
+  .connected-profile-page .profile-banner__copy h2 { font-size: clamp(24px, 6vw, 32px); line-height: 1.2; }
+  .connected-profile-page .profile-banner__copy p { margin-bottom: 10px; font-size: 12px; }
+  .connected-profile-banner__meta { gap: 4px 10px; }
+  .connected-profile-banner__badges { gap: 6px; }
+  .connected-profile-banner__badges .profile-uid, .connected-profile-banner__badges .pill { min-height: 44px; }
+  .profile-section-shortcuts { gap: 6px; }
+  .profile-section-shortcuts button { flex-direction: column; gap: 6px; padding: 9px 3px; font-size: 10px; }
+  .connected-profile-page .profile-account-metrics { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
+  .connected-profile-page .profile-account-metrics article { padding: 12px; min-height: 88px; }
+  .connected-profile-page .profile-account-metrics strong { font-size: 22px; }
+  .connected-profile-page .profile-account-metrics span { font-size: 11px; }
+  .connected-profile-page .connected-profile-daily > article { padding: 14px; }
+  .connected-profile-page .connected-profile-daily .eyebrow { flex-wrap: wrap; gap: 6px; font-size: 10px; }
+  .connected-profile-page .connected-profile-daily h2 { font-size: 22px; }
+  .connected-profile-page .connected-profile-daily p { font-size: 12px; }
+  .connected-profile-page .connected-profile-expeditions { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
+  .connected-profile-page .connected-profile-expeditions article { padding: 10px; gap: 8px; }
+  .profile-roster-controls { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
+  .profile-roster-controls .profile-roster-search { grid-column: 1 / -1; }
+  .profile-roster-controls input, .profile-roster-controls select { font-size: 16px; }
+  .connected-profile-page .connected-profile-roster { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
+  .connected-profile-page .profile-owned-card { flex-direction: column; align-items: flex-start; min-height: 174px; padding: 12px; gap: 10px; }
+  .connected-profile-page .profile-owned-card .showcase-card__image { width: 54px; height: 54px; }
+  .profile-owned-card strong { font-size: 13px; }
+  .profile-owned-card span { font-size: 11px; }
+  .connected-profile-page .profile-owned-card__hint { font-size: 10px; }
+  .connected-profile-page .connected-profile-exploration { grid-template-columns: minmax(0, 1fr); }
+  .connected-profile-page .profile-region-card { padding: 14px; }
+  .connected-profile-page .profile-chest-metrics { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .connected-profile-page .section-block > .section-title p { font-size: 12px; }
+}
+@media (prefers-reduced-motion: no-preference) {
+  .profile-owned-card, .profile-section-shortcuts button { transition: border-color .15s ease, background-color .15s ease; }
+}

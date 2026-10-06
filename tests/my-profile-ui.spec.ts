@@ -452,3 +452,118 @@ test('Retry artwork rechecks the same failed images rather than getting stuck in
   await expect(page.locator('.connected-profile-banner img.profile-banner__background')).toBeVisible();
   await expect(page.getByRole('button', { name: 'Retry artwork', exact: true })).toHaveCount(0);
 });
+
+test('mobile profile shortcuts, roster filters and safe regional artwork work without extra account requests', async ({ page }, testInfo) => {
+  const requests = await mock(page, { connected: true });
+  const jean = { ...character, id: 10000003, name: 'Jean', element: 'Anemo', level: 80 };
+  const noelle = { ...character, id: 10000034, name: 'Noelle', element: 'Geo', level: 60, rarity: 4 };
+  const cover = 'https://upload-os-bbs.hoyolab.com/region-cover.png';
+  const offering = 'https://upload-os-bbs.hoyolab.com/offering.png';
+  const images: string[] = [];
+  page.on('request', (request) => { if (request.resourceType() === 'image') images.push(request.url()); });
+  await page.addInitScript(() => { Object.defineProperty(navigator, 'clipboard', { configurable: true, value: { writeText: async (text: string) => { (window as any).copiedUid = text; } } }); });
+  await page.route('**/api/my-profile', (route) => {
+    const input = route.request().postData() ? route.request().postDataJSON() : undefined;
+    if (input?.action === 'profile') return route.fulfill({ json: { profile: { ...profile, characters: [jean, character, noelle], exploration: [{ name: 'Nod-Krai', icon: character.icon, artwork: [cover], offerings: [{ name: 'Meeting Place', icon: offering, level: 0 }], percentage: 87.1, level: 0 }] } } });
+    return route.fallback();
+  });
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.goto('/me');
+  await expect(page.locator('.connected-profile-banner img.profile-avatar')).toBeVisible();
+  await expect(page.locator('main').getByRole('link', { name: 'UID Search', exact: true })).toHaveCount(0);
+  await expect(page.getByRole('navigation', { name: 'My Profile sections' }).getByRole('button')).toHaveCount(4);
+  await page.getByRole('button', { name: 'Copy UID', exact: true }).click();
+  await expect(page.getByRole('status').filter({ hasText: 'UID copied.' })).toBeVisible();
+  expect(await page.evaluate(() => (window as any).copiedUid)).toBe(role.uid);
+  await page.getByRole('button', { name: 'Overview', exact: true }).click();
+  await page.screenshot({ path: testInfo.outputPath('mobile-profile-overview.png') });
+  await page.getByRole('button', { name: 'Daily notes', exact: true }).click();
+  await expect(page.locator('.profile-section-anchor:focus')).toContainText('Your daily adventure');
+  await expect(page.getByRole('progressbar', { name: 'Original Resin capacity' })).toHaveAttribute('value', '40');
+  await expect(page.getByRole('button', { name: 'Set alarm', exact: true })).toBeVisible();
+  await page.screenshot({ path: testInfo.outputPath('mobile-profile-daily.png') });
+  const beforeFiltering = requests.length;
+  await page.getByRole('button', { name: 'Characters', exact: true }).click();
+  const cards = page.locator('.connected-profile-roster .showcase-card--link');
+  await expect(cards).toHaveCount(3);
+  await page.getByRole('combobox', { name: 'Sort owned characters' }).selectOption('level');
+  await expect(cards.first()).toContainText('Kamisato Ayaka');
+  await page.getByRole('combobox', { name: 'Filter owned characters by element' }).selectOption('Geo');
+  await expect(cards).toHaveCount(1);
+  await expect(cards.first()).toContainText('Noelle');
+  await expect(page.getByRole('status').filter({ hasText: 'Showing' })).toContainText('Showing 1 of 3 characters');
+  await page.getByRole('searchbox', { name: 'Search owned characters' }).fill('Ayaka');
+  await expect(cards).toHaveCount(0);
+  await expect(page.locator('.empty-state')).toContainText('No characters match your filters.');
+  await page.getByRole('button', { name: 'Clear filters', exact: true }).click();
+  await expect(cards).toHaveCount(3);
+  expect(requests).toHaveLength(beforeFiltering);
+  expect(requests.some((request) => request.body?.action === 'character')).toBe(false);
+  await page.screenshot({ path: testInfo.outputPath('mobile-profile-characters.png') });
+  await page.getByRole('button', { name: 'Exploration', exact: true }).click();
+  const region = page.locator('.profile-region-card');
+  await expect(region.getByRole('heading', { name: 'Nod-Krai' })).toBeVisible();
+  await expect(region.locator('img.profile-region-card__artwork')).toHaveAttribute('src', cover);
+  await expect(page.getByRole('progressbar', { name: 'Nod-Krai exploration' })).toHaveAttribute('value', '87.1');
+  await expect(region.locator('.profile-region-card__level')).toHaveCount(0);
+  expect(images).not.toContain(offering);
+  await region.locator('summary').click();
+  await expect(region.locator('li')).toContainText('Meeting Place');
+  await expect(region.locator('li')).toContainText('Level 0');
+  await expect(region.locator('li img')).toHaveAttribute('src', offering);
+  await page.screenshot({ path: testInfo.outputPath('mobile-profile-exploration.png') });
+  for (const width of [320, 360, 390, 768, 1366]) {
+    await page.setViewportSize({ width, height: 844 });
+    expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+  }
+  const stored = await page.evaluate(() => JSON.stringify({ ...localStorage, ...sessionStorage }));
+  expect(stored).not.toContain(role.uid);
+  expect(stored).not.toContain(role.nickname);
+});
+
+test('mobile profile handles long names, unknown or zero resin and clipboard denial without invented readings', async ({ page }) => {
+  await mock(page, { connected: true });
+  await page.addInitScript(() => { Object.defineProperty(navigator, 'clipboard', { configurable: true, value: { writeText: async () => { throw new Error('fixture permission denial'); } } }); });
+  await page.route('**/api/my-profile', (route) => {
+    const input = route.request().postData() ? route.request().postDataJSON() : undefined;
+    if (input?.action === 'profile') return route.fulfill({ json: { profile: { ...profile, role: { ...role, nickname: 'A very long Traveler nickname 🌟 with more text' }, notes: { ...profile.notes, resin: 0 }, exploration: [] } } });
+    return route.fallback();
+  });
+  await page.setViewportSize({ width: 320, height: 740 });
+  await page.goto('/me');
+  await expect(page.locator('.connected-profile-banner')).toContainText('A very long Traveler nickname');
+  await page.getByRole('button', { name: 'Copy UID', exact: true }).click();
+  await expect(page.locator('.profile-copy-status')).toContainText('Could not copy');
+  await expect(page.locator('main')).not.toContainText('fixture permission denial');
+  await expect(page.getByRole('progressbar', { name: 'Original Resin capacity' })).toHaveAttribute('value', '0');
+  await expect(page.locator('.connected-profile-daily')).toContainText('0 / 200');
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+  await page.route('**/api/my-profile', (route) => route.request().postData() && route.request().postDataJSON().action === 'profile' ? route.fulfill({ json: { profile: { ...profile, notes: null, exploration: [], characters: [] } } }) : route.fallback());
+  await page.getByRole('button', { name: 'Refresh', exact: true }).click();
+  await expect(page.locator('.connected-profile-daily')).toContainText('— / —');
+  await expect(page.getByRole('progressbar', { name: 'Original Resin capacity' })).toHaveCount(0);
+  await expect(page.getByRole('button', { name: 'Set alarm', exact: true })).toHaveCount(0);
+  await expect(page.locator('.empty-state')).toContainText('Owned character details are unavailable');
+  await expect(page.locator('main')).toContainText('Exploration details were not shared');
+});
+
+test('returning from a build retains in-memory roster filters, while refresh clears them', async ({ page }) => {
+  await mock(page, { connected: true });
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.goto(`/me/${role.uid}`);
+  await page.getByRole('searchbox', { name: 'Search owned characters' }).fill('Ayaka');
+  await page.getByRole('combobox', { name: 'Filter owned characters by element' }).selectOption('Cryo');
+  await page.getByRole('combobox', { name: 'Sort owned characters' }).selectOption('level');
+  await page.getByRole('link', { name: /Kamisato Ayaka.*View equipped build/ }).click();
+  await expect(page.getByRole('heading', { name: 'Mistsplitter Reforged', exact: true })).toBeVisible();
+  await page.getByRole('link', { name: 'Back to My Profile', exact: true }).click();
+  await expect(page.getByRole('searchbox', { name: 'Search owned characters' })).toHaveValue('Ayaka');
+  await expect(page.getByRole('combobox', { name: 'Filter owned characters by element' })).toHaveValue('Cryo');
+  await expect(page.getByRole('combobox', { name: 'Sort owned characters' })).toHaveValue('level');
+  const stored = await page.evaluate(() => JSON.stringify({ ...localStorage, ...sessionStorage }));
+  expect(stored).not.toContain('"search":"Ayaka"');
+  await page.getByRole('button', { name: 'Refresh', exact: true }).click();
+  await expect(page.getByRole('searchbox', { name: 'Search owned characters' })).toHaveValue('');
+  await expect(page.getByRole('combobox', { name: 'Filter owned characters by element' })).toHaveValue('');
+  await expect(page.getByRole('combobox', { name: 'Sort owned characters' })).toHaveValue('default');
+});

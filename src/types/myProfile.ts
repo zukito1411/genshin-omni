@@ -3,6 +3,7 @@ export interface ProfileArtwork { uid: string; avatar: string; namecard: string;
 export interface ProfileSession { available: boolean; connected: boolean; directLogin?: boolean; roles?: ConnectedRole[]; csrf?: string; expiresAt?: number; }
 export interface PrivateCharacter { id: number; name: string; icon: string; element: string; rarity: number | null; level: number | null; friendship: number | null; constellation: number | null; }
 export interface PrivateStat { label: string; value: string; }
+export interface ProfileRosterView { search: string; element: string; sort: 'default' | 'name' | 'level' | 'rarity'; }
 export interface PrivateEquipment { name: string; icon: string; level: number | null; stats: PrivateStat[]; }
 export interface PrivateBuild extends PrivateCharacter {
   image: string; stats: PrivateStat[];
@@ -15,6 +16,6 @@ export interface PrivateProfile {
   role: ConnectedRole; updatedAt: number; unavailable: string[];
   stats: { achievements: number | null; daysActive: number | null; characters: number | null; abyss: string | null; theaterAct: number | null; stygian: string | null; waypoints: number | null; domains: number | null; chests: Array<{ label: string; value: number | null }> };
   notes: null | { resin: number | null; maxResin: number | null; recoverySeconds: number | null; commissions: number | null; maxCommissions: number | null; commissionRewardClaimed: boolean | null; realmCurrency: number | null; maxRealmCurrency: number | null; expeditions: Array<{ icon: string; status: string; remainingSeconds: number | null }> };
-  exploration: Array<{ name: string; icon: string; icons?: string[]; percentage: number | null; level: number | null }>;
+  exploration: Array<{ name: string; icon: string; icons?: string[]; artwork?: string[]; offerings?: Array<{ name: string; icon: string; level: number | null }>; percentage: number | null; level: number | null }>;
   characters: PrivateCharacter[];
 }

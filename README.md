@@ -118,6 +118,18 @@ owned-character selector. Talent/effect descriptions expand on demand; game
 link tokens and escaped newlines are cleaned as plain text, with paragraphs
 preserved. Artwork retry also rechecks failed image sources on that page.
 
+The private overview is mobile-first: compact account cards, a copy-UID control,
+section shortcuts, a two-column phone roster with local search/element/sort
+controls, a resin capacity bar, and expandable regional offerings. The redundant
+UID Search button has been removed from this page; sidebar navigation remains.
+Roster filters stay in memory while inspecting a build and are cleared on
+refresh, account switching, or disconnect; they are not saved in browser storage.
+HoYoLAB-supplied region covers/backgrounds and offering icons are optional,
+validated with the existing official-image allowlist, and lazily loaded. No
+additional account endpoints or background polling are used for these controls.
+The new presentation stylesheet loads only with the My Profile route. All
+progress displays still reflect the last account reading, not invented live data.
+
 The main connection flow is now **email/username and HoYoverse password**, followed
 by HoYoLAB's CAPTCHA when required. Credentials are RSA-encrypted in the browser
 for HoYoLAB's public key before being sent to `/api/hoyolab-login`; this backend
