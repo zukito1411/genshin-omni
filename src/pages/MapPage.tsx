@@ -6,7 +6,7 @@ const OFFICIAL_MAP_URL = 'https://act.hoyolab.com/ys/app/interactive-map/index.h
 export function MapPage() {
   return <div className="official-map-page">
     <SectionTitle
-      eyebrow="EXPLORATION / LOCAL DEVELOPMENT"
+      eyebrow="EXPLORATION"
       title="Teyvat Interactive Map"
       description="The official HoYoLAB map includes teleport waypoints, Statues of The Seven, domains, bosses, gathering materials, and its own filters and account-linked progress."
       action={<a className="button secondary" href={OFFICIAL_MAP_URL} target="_blank" rel="noreferrer">Open official map <ExternalLink size={14} /></a>}
@@ -27,7 +27,7 @@ export function MapPage() {
       </div>
       <div className="map-help">
         <span>Use HoYoLAB's category filters to find waypoints, materials, bosses, domains, and more.</span>
-        <a href={OFFICIAL_MAP_URL} target="_blank" rel="noreferrer">If the provider blocks embedding, open the official map directly <ExternalLink size={12} /></a>
+        <a href={OFFICIAL_MAP_URL} target="_blank" rel="noreferrer">Map not showing? Open the official map in a new tab <ExternalLink size={12} /></a>
       </div>
     </section>
   </div>;

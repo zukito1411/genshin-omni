@@ -97,6 +97,8 @@ test('UID search opens equipped builds with correct values and supports deep-lin
   await expect(page.locator('.equipped-artifact-grid').first()).toContainText('46.6%');
   await expect(page.locator('.showcase-talents')).toContainText('Level 13');
   await expect(page.locator('.showcase-constellations .unlocked')).toHaveCount(3);
+  await expect(page.locator('.showcase-raw, pre')).toHaveCount(0);
+  await expect(page.getByText('All shared build data', { exact: true })).toHaveCount(0);
   await page.reload();
   await expect(page.getByRole('heading', { name: 'Kamisato Ayaka', exact: true })).toBeVisible();
   await expect(page.getByRole('heading', { name: 'Mistsplitter Reforged' })).toBeVisible();
@@ -453,6 +455,7 @@ test('weapon and artifact libraries show artwork and all supplied set pieces on 
   await page.locator('.entity-card').click();
   await expect(page.locator('.artifact-piece')).toHaveCount(5);
   await expect(page.locator('.drawer')).toContainText('Cryo DMG Bonus +15%');
+  await expect(page.locator('.drawer a[href*="genshin-db-api"]')).toHaveCount(0);
   await expect(page.locator('.paimon-companion')).toBeHidden();
   await page.locator('.artifact-piece img').first().scrollIntoViewIfNeeded();
   await expect.poll(() => page.locator('.artifact-piece img').first().evaluate((node: HTMLImageElement) => node.naturalWidth)).toBeGreaterThan(0);
@@ -612,4 +615,365 @@ test.describe('touch phone landscape', () => {
     expect(panel.y).toBeGreaterThanOrEqual(0);
     expect(panel.y + panel.height).toBeLessThanOrEqual(390);
   });
+});
+
+test('Paimon uses transform movement and pauses sprite ticks while the page is hidden', async ({ page }) => {
+  await mockSources(page);
+  await page.goto('/profile');
+  const sprite = page.locator('.paimon-companion__sprite');
+  await expect(sprite).toBeVisible();
+  const motion = await page.locator('.paimon-companion').evaluate((node: HTMLElement) => ({ left: node.style.left, top: node.style.top, transform: node.style.transform, transition: getComputedStyle(node).transitionProperty }));
+  expect(motion).toMatchObject({ left: '', top: '', transition: 'transform' });
+  expect(motion.transform).toContain('translate');
+  await page.evaluate(() => {
+    Object.defineProperty(document, 'visibilityState', { configurable: true, value: 'hidden' });
+    document.dispatchEvent(new Event('visibilitychange'));
+  });
+  await page.waitForTimeout(100);
+  const paused = await sprite.getAttribute('style');
+  await page.waitForTimeout(400);
+  expect(await sprite.getAttribute('style')).toBe(paused);
+  await page.evaluate(() => {
+    Object.defineProperty(document, 'visibilityState', { configurable: true, value: 'visible' });
+    document.dispatchEvent(new Event('visibilitychange'));
+  });
+  await expect.poll(() => sprite.getAttribute('style')).not.toBe(paused);
+  await page.getByRole('button', { name: 'Open Paimon helper' }).click();
+  await expect(page.locator('#paimon-helper')).toBeVisible();
+});
+
+test('farming plans skip unrelated build requests and remain usable during optional enrichment', async ({ page }) => {
+  await mockSources(page);
+  const calls: string[] = [];
+  page.on('request', (request) => calls.push(request.url()));
+  let release!: () => void;
+  const gate = new Promise<void>((resolve) => { release = resolve; });
+  await page.route('**/api/v5/materials?**', async (route) => { await gate; await route.fulfill({ json: { name: new URL(route.request().url()).searchParams.get('query') } }); });
+  try {
+    await page.goto('/materials');
+    await page.getByRole('checkbox', { name: 'Kamisato Ayaka' }).check();
+    await page.getByRole('button', { name: 'Build checklist' }).click();
+    await expect(page.locator('.farming-material-row')).toHaveCount(2);
+    await expect(page.getByRole('button', { name: 'Build checklist' })).toBeEnabled();
+    expect(calls.some((url) => /\/api\/v5\/(?:stats|talents|constellations)\?/.test(url))).toBe(false);
+    expect(calls.some((url) => url.includes('/gi/avatars.json'))).toBe(false);
+    await page.locator('.farming-material-row input').first().check();
+    await expect(page.locator('.planner-progress')).toContainText('1 of 2');
+    await page.getByRole('checkbox', { name: 'Kamisato Ayaka' }).uncheck();
+    await expect(page.locator('.farming-material-row')).toHaveCount(0);
+  } finally { release(); }
+});
+
+test('character progression and skills display before an optional provider finishes', async ({ page }) => {
+  await mockSources(page);
+  let release!: () => void;
+  const gate = new Promise<void>((resolve) => { release = resolve; });
+  await page.route('**/genshin.jmp.blue/characters/kamisato-ayaka?**', async (route) => { await gate; await route.fulfill({ json: { name: characterData.name } }); });
+  try {
+    await page.goto('/characters/10000002');
+    await expect(page.locator('.stat-table')).toContainText('342');
+    await page.getByRole('button', { name: 'Skills', exact: true }).click();
+    await expect(page.locator('.talent-detail')).toContainText('Kamisato Art: Kabuki');
+    await expect(page.locator('.talent-detail img')).toHaveAttribute('src', /Skill_A_01/);
+  } finally { release(); }
+});
+
+test('UID names and equipped builds display before optional relic catalog enrichment', async ({ page }) => {
+  await mockSources(page);
+  let release!: () => void;
+  const gate = new Promise<void>((resolve) => { release = resolve; });
+  await page.route('**/gi/relics.json', async (route) => { await gate; await route.fulfill({ json: {} }); });
+  try {
+    await page.goto('/profile/800000001');
+    await expect(page.locator('.showcase-card--link')).toContainText('Kamisato Ayaka');
+    await page.locator('.showcase-card--link').click();
+    await expect(page.getByRole('heading', { name: 'Kamisato Ayaka', exact: true })).toBeVisible();
+    await expect(page.locator('.equipped-item').first()).toContainText('674');
+  } finally { release(); }
+});
+
+test('image scheduler shares requests and caps simultaneous downloads', async ({ page }) => {
+  await mockSources(page);
+  let running = 0;
+  let maximum = 0;
+  const calls: string[] = [];
+  await page.route('https://images.test/**', async (route) => {
+    calls.push(route.request().url());
+    maximum = Math.max(maximum, ++running);
+    await new Promise((resolve) => setTimeout(resolve, 50));
+    await route.fulfill({ contentType: 'image/svg+xml', body: fixtureImage });
+    running--;
+  });
+  await page.goto('/profile');
+  const results = await page.evaluate(async () => {
+    const modulePath = '/src/api/imageLoader.ts';
+    const { loadImage } = await import(modulePath);
+    const controller = new AbortController();
+    const jobs = Array.from({ length: 10 }, (_, index) => loadImage(`https://images.test/${index}.svg`, false, controller.signal));
+    const shared = loadImage('https://images.test/0.svg', true, new AbortController().signal);
+    const cancelled = new AbortController();
+    const unused = loadImage('https://images.test/cancelled.svg', false, cancelled.signal);
+    cancelled.abort();
+    return { values: await Promise.all(jobs), shared: await shared, unused: await unused };
+  });
+  expect(results).toEqual({ values: Array(10).fill(true), shared: true, unused: false });
+  expect(maximum).toBeLessThanOrEqual(4);
+  expect(calls).toHaveLength(10);
+  expect(calls.filter((url) => url.endsWith('/0.svg'))).toHaveLength(1);
+});
+
+test('large response caches survive reload and clearing them preserves personal roster data', async ({ page }) => {
+  await mockSources(page);
+  let calls = 0;
+  await page.route('https://data.test/large-catalog', (route) => { calls++; return route.fulfill({ json: { data: 'x'.repeat(120_000) } }); });
+  await page.goto('/profile');
+  const load = () => page.evaluate(async () => {
+    const modulePath = '/src/api/http.ts';
+    const { getJson } = await import(modulePath);
+    const value = await getJson('https://data.test/large-catalog');
+    return value.data.length;
+  });
+  expect(await load()).toBe(120_000);
+  expect(await page.evaluate(() => localStorage.getItem('teyvat-atlas:v5:https://data.test/large-catalog'))).toBeNull();
+  await expect.poll(() => page.evaluate(() => new Promise<boolean>((resolve) => {
+    const request = indexedDB.open('teyvat-atlas:responses:v1', 1);
+    request.onsuccess = () => {
+      const db = request.result;
+      const read = db.transaction('responses').objectStore('responses').get('https://data.test/large-catalog');
+      read.onsuccess = () => { resolve(Boolean(read.result)); db.close(); };
+    };
+    request.onerror = () => resolve(false);
+  }))).toBe(true);
+  await page.reload();
+  expect(await load()).toBe(120_000);
+  expect(calls).toBe(1);
+  await page.evaluate(async () => {
+    localStorage.setItem('teyvat-atlas:owned-characters:v1', '["10000002"]');
+    const modulePath = '/src/api/responseCache.ts';
+    const { clearResponseCache } = await import(modulePath);
+    await clearResponseCache();
+  });
+  expect(await load()).toBe(120_000);
+  expect(calls).toBe(2);
+  expect(await page.evaluate(() => localStorage.getItem('teyvat-atlas:owned-characters:v1'))).toBe('["10000002"]');
+});
+
+async function askLocalPaimon(page: Page, question: string, expected: string | RegExp) {
+  await page.getByRole('textbox', { name: 'Ask Paimon', exact: true }).fill(question);
+  await page.getByRole('button', { name: 'Ask', exact: true }).click();
+  await expect(page.locator('#paimon-helper > p')).toContainText(expected);
+  await expect(page.getByRole('button', { name: 'Ask', exact: true })).toBeEnabled();
+}
+
+async function readPaimonNotebook(page: Page) {
+  return page.evaluate(() => new Promise<{ facts: Array<{ key: string; value: string }>; turns: Array<{ question: string; answer: string }> }>((resolve, reject) => {
+    const request = indexedDB.open('teyvat-atlas:paimon:v1', 1);
+    request.onerror = () => reject(request.error);
+    request.onsuccess = () => {
+      const db = request.result;
+      const tx = db.transaction('notebook');
+      const read = tx.objectStore('notebook').get('state');
+      read.onsuccess = () => resolve(read.result ?? { facts: [], turns: [] });
+      read.onerror = () => reject(read.error);
+      tx.oncomplete = tx.onabort = () => db.close();
+    };
+  }));
+}
+
+test('Paimon remembers, corrects and retrieves local notes across reloads without contacting AI', async ({ page }) => {
+  await mockSources(page);
+  let calls = 0;
+  await page.route('**/api/paimon-chat', (route) => { calls++; return route.fulfill({ status: 503 }); });
+  await page.goto('/profile');
+  await page.getByRole('button', { name: 'Open Paimon helper' }).click();
+  await askLocalPaimon(page, 'my name is Alex', 'Saved locally in this browser');
+  await askLocalPaimon(page, 'my favorite character is Ayaka', 'Ayaka');
+  await askLocalPaimon(page, 'remember my favorite character is Furina', 'Furina');
+  await askLocalPaimon(page, 'teach my rotation => skill, burst, then normal attacks', 'Paimon wrote it down');
+  await page.reload();
+  await page.getByRole('button', { name: 'Open Paimon helper' }).click();
+  await askLocalPaimon(page, 'what is my name?', 'call you Alex');
+  await askLocalPaimon(page, 'what is my favourite character?', 'favorite character: Furina');
+  await askLocalPaimon(page, 'what is my rotation?', 'skill, burst, then normal attacks');
+  await expect(page.locator('#paimon-helper > p')).toContainText('independently verified');
+  await expect.poll(async () => (await readPaimonNotebook(page)).turns.length).toBe(3);
+  expect((await readPaimonNotebook(page)).facts.filter((fact) => fact.key === 'favorite character')).toEqual([{ key: 'favorite character', label: 'favorite character', value: 'Furina', updatedAt: expect.any(Number) }]);
+  expect(calls).toBe(0);
+});
+
+test('Paimon performs local math, follows saved context and keeps long replies within the mobile helper', async ({ page }) => {
+  await page.setViewportSize({ width: 320, height: 740 });
+  await mockSources(page);
+  let calls = 0;
+  await page.route('**/api/paimon-chat', (route) => { calls++; return route.fulfill({ status: 503 }); });
+  await page.goto('/profile');
+  await page.locator('.paimon-launcher').click();
+  await askLocalPaimon(page, '(12 + 8) * 3', '= 60');
+  await expect.poll(async () => (await readPaimonNotebook(page)).turns.length).toBe(1);
+  await page.reload();
+  await page.locator('.paimon-launcher').click();
+  await askLocalPaimon(page, 'multiply that by 2', '= 120');
+  await askLocalPaimon(page, 'why?', 'We were discussing');
+  await expect(page.locator('#paimon-helper > p')).toContainText('multiply that by 2');
+  await askLocalPaimon(page, 'analyze: 1, 2, 3, 4', 'Population variance: 1.25');
+  await askLocalPaimon(page, 'regression: 1,2,3; 2,4,6', 'Pearson correlation: 1');
+  await askLocalPaimon(page, 'show our chat history', 'multiply that by 2');
+  for (const width of [320, 390, 768]) {
+    await page.setViewportSize({ width, height: 740 });
+    const helper = await page.locator('#paimon-helper').boundingBox();
+    expect(helper!.x).toBeGreaterThanOrEqual(0);
+    expect(helper!.x + helper!.width).toBeLessThanOrEqual(width);
+    expect(await page.locator('#paimon-helper').evaluate((node) => node.scrollWidth <= node.clientWidth)).toBe(true);
+    await expect(page.getByRole('textbox', { name: 'Ask Paimon', exact: true })).toBeVisible();
+  }
+  expect(calls).toBe(0);
+});
+
+test('Paimon forget commands erase notes and journals without deleting other player preferences', async ({ page }) => {
+  await mockSources(page);
+  await page.goto('/profile');
+  await page.evaluate(() => localStorage.setItem('teyvat-atlas:owned-characters:v1', '["10000002"]'));
+  await page.getByRole('button', { name: 'Open Paimon helper' }).click();
+  await askLocalPaimon(page, 'my name is Alex', 'Paimon wrote it down');
+  await askLocalPaimon(page, 'remember goal is build Ayaka', 'Paimon wrote it down');
+  await askLocalPaimon(page, 'what is my goal?', 'goal: build Ayaka');
+  await askLocalPaimon(page, 'forget goal', 'cleared the conversation journal');
+  expect((await readPaimonNotebook(page)).turns).toEqual([]);
+  expect((await readPaimonNotebook(page)).facts.map((fact) => fact.key)).toEqual(['name']);
+  await askLocalPaimon(page, 'forget everything', 'To confirm');
+  expect((await readPaimonNotebook(page)).facts).toHaveLength(1);
+  // Even an old localStorage fallback must not resurrect forgotten notes.
+  await page.evaluate(() => localStorage.setItem('teyvat-atlas:paimon-notebook:v1', JSON.stringify({ facts: [{ key: 'old', label: 'old', value: 'stale note', updatedAt: 1 }], turns: [] })));
+  await askLocalPaimon(page, 'confirm forget everything', 'notebook and conversation journal are empty');
+  expect(await readPaimonNotebook(page)).toMatchObject({ facts: [], turns: [] });
+  expect(await page.evaluate(() => localStorage.getItem('teyvat-atlas:paimon-notebook:v1'))).toBeNull();
+  await page.reload();
+  await page.getByRole('button', { name: 'Open Paimon helper' }).click();
+  await askLocalPaimon(page, 'what do you remember?', 'saved notebook is empty');
+  expect(await page.evaluate(() => localStorage.getItem('teyvat-atlas:owned-characters:v1'))).toBe('["10000002"]');
+});
+
+test('Paimon stays usable when IndexedDB and localStorage access throw', async ({ page }) => {
+  await page.addInitScript(() => {
+    for (const key of ['indexedDB', 'localStorage']) Object.defineProperty(window, key, { configurable: true, get() { throw new DOMException('Storage blocked', 'SecurityError'); } });
+  });
+  await mockSources(page);
+  const errors: string[] = [];
+  page.on('pageerror', (error) => errors.push(error.message));
+  await page.goto('/profile');
+  await page.getByRole('button', { name: 'Open Paimon helper' }).click();
+  await askLocalPaimon(page, 'my name is Alex', 'only for this session');
+  await askLocalPaimon(page, 'what is my name?', 'call you Alex');
+  await askLocalPaimon(page, 'sqrt(81)', '= 9');
+  expect(errors).toEqual([]);
+});
+
+test('Paimon uses cloud AI for general conversation but keeps saved notes and credentials private', async ({ page }) => {
+  await mockSources(page);
+  const requests: Record<string, unknown>[] = [];
+  await page.route('**/api/paimon-chat', (route) => {
+    requests.push(route.request().postDataJSON());
+    return route.fulfill({ json: { reply: 'Paimon is ready for adventure! What would you like to do?' } });
+  });
+  await page.goto('/profile');
+  await page.getByRole('button', { name: 'Open Paimon helper' }).click();
+  await askLocalPaimon(page, 'my name is PrivateTestName', 'Paimon wrote it down');
+  await askLocalPaimon(page, 'How are you?', 'ready for adventure');
+  await expect(page.locator('#paimon-helper small')).toContainText('AI Paimon is answering');
+  expect(requests).toHaveLength(1);
+  expect(Object.keys(requests[0]).sort()).toEqual(['localTime', 'page', 'question']);
+  expect(JSON.stringify(requests[0])).not.toContain('PrivateTestName');
+  await expect.poll(async () => (await readPaimonNotebook(page)).turns.length).toBe(1);
+  await askLocalPaimon(page, 'my password is test-secret', 'will not save this message');
+  expect(requests).toHaveLength(1);
+  expect(JSON.stringify(await readPaimonNotebook(page))).not.toContain('test-secret');
+  await askLocalPaimon(page, '1/0', 'zero is undefined');
+  expect(requests).toHaveLength(1);
+});
+
+test('Paimon avoids repeated AI stalls during an outage and asks honest offline follow-up questions', async ({ page }) => {
+  await mockSources(page);
+  let calls = 0;
+  await page.route('**/api/paimon-chat', (route) => { calls++; return route.fulfill({ status: 503 }); });
+  await page.goto('/profile');
+  await page.getByRole('button', { name: 'Open Paimon helper' }).click();
+  await askLocalPaimon(page, 'How are you?', 'How are you doing');
+  await askLocalPaimon(page, 'Tell me about an unknown nebula', 'reliable offline answer');
+  await askLocalPaimon(page, 'yes', 'teach <topic>');
+  await askLocalPaimon(page, 'memory help', 'not a self-training neural model');
+  expect(calls).toBe(1);
+});
+
+test('Paimon learns a prompted name and refreshes memories changed in another tab', async ({ page, context }) => {
+  await page.addInitScript(() => Object.defineProperty(navigator, 'onLine', { value: false, configurable: true }));
+  await mockSources(page);
+  await page.goto('/profile');
+  await page.locator('.paimon-launcher').click();
+  await askLocalPaimon(page, 'hello', 'What should Paimon call you');
+  await askLocalPaimon(page, 'Alex', 'Saved locally');
+  await askLocalPaimon(page, 'my name is ...', 'non-empty note');
+  await askLocalPaimon(page, 'what is my name?', 'call you Alex');
+  await askLocalPaimon(page, 'Does the app store my UID?', 'No sign-in or game password is required');
+  const other = await context.newPage();
+  await mockSources(other);
+  await other.goto('/profile');
+  await other.locator('.paimon-launcher').click();
+  await askLocalPaimon(other, 'remember favorite character is Furina', 'Saved locally');
+  await askLocalPaimon(page, 'search for Furina', 'favorite character: Furina');
+  await askLocalPaimon(other, 'forget everything', 'To confirm');
+  await askLocalPaimon(other, 'confirm forget everything', 'journal are empty');
+  await askLocalPaimon(page, 'what do you remember?', 'notebook is empty');
+  await askLocalPaimon(page, 'times 2', 'Which number');
+  await other.close();
+});
+
+test('Paimon recovers newer fallback notes after a temporary notebook transaction outage', async ({ page }) => {
+  await page.addInitScript(() => {
+    const original = IDBDatabase.prototype.transaction;
+    IDBDatabase.prototype.transaction = function (...args) {
+      if (this.name === 'teyvat-atlas:paimon:v1' && document.documentElement.dataset.blockNotebook === 'yes') throw new DOMException('Temporary outage', 'InvalidStateError');
+      return original.apply(this, args);
+    };
+  });
+  await mockSources(page);
+  await page.goto('/profile');
+  await page.locator('.paimon-launcher').click();
+  await askLocalPaimon(page, 'my favorite character is Ayaka', 'Saved locally');
+  await page.evaluate(() => { document.documentElement.dataset.blockNotebook = 'yes'; });
+  await askLocalPaimon(page, 'my favorite character is Furina', 'Saved locally');
+  await page.reload();
+  await page.locator('.paimon-launcher').click();
+  await askLocalPaimon(page, 'what is my favorite character?', 'favorite character: Furina');
+  await expect.poll(() => page.evaluate(() => localStorage.getItem('teyvat-atlas:paimon-notebook:v1'))).toBeNull();
+  await page.reload();
+  await page.locator('.paimon-launcher').click();
+  await askLocalPaimon(page, 'what is my favorite character?', 'favorite character: Furina');
+});
+
+test('public reference pages show player guidance and credits instead of developer details', async ({ page }) => {
+  await page.setViewportSize({ width: 320, height: 740 });
+  await mockSources(page);
+  for (const [path, heading] of [['/sources', 'Sources'], ['/guides', 'Guides, FAQ & Reference Hub'], ['/map', 'Teyvat Interactive Map']]) {
+    await page.goto(path);
+    await expect(page.getByRole('heading', { name: heading, exact: true })).toBeVisible();
+    await expect(page.locator('main')).not.toContainText(/\b(?:API|CORS|JSON|localStorage|Vite|endpoint|payload|schema)\b|LOCAL DEVELOPMENT|CLIENT ONLY|game-data queries/i);
+    await expect(page.locator('main a[href*="genshin-db-api"], main a[href$=".json"]')).toHaveCount(0);
+    expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
+  }
+  await page.goto('/sources');
+  await expect(page.getByRole('heading', { name: 'GenshinDB', exact: true })).toBeVisible();
+  await expect(page.getByRole('link', { name: 'Visit reference' }).first()).toHaveAttribute('href', 'https://github.com/theBowja/genshin-db');
+});
+
+test('loading failures remain useful without exposing network errors, response bodies or query strings', async ({ page }) => {
+  await mockSources(page);
+  await page.route('**/api/v5/**', (route) => route.fulfill({ body: 'query=diagnostic-secret https://example.test/api/debug', contentType: 'text/plain' }));
+  await page.route('**/genshin.jmp.blue/characters**', (route) => route.fulfill({ status: 404 }));
+  await page.route('**/api/uid/**', (route) => route.fulfill({ body: 'query=diagnostic-secret https://example.test/api/debug', contentType: 'text/plain' }));
+  for (const path of ['/characters', '/weapons', '/characters/kamisato-ayaka', '/profile/800000001']) {
+    await page.goto(path);
+    await expect(page.locator('.error-box')).toBeVisible();
+    await expect(page.locator('.error-box')).toContainText(/try again|Check your connection/i);
+    await expect(page.locator('main')).not.toContainText(/diagnostic-secret|example\.test|query=|Request failed|Unexpected token|Failed to fetch|SyntaxError|https?:\/\//);
+  }
 });

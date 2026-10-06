@@ -1,19 +1,20 @@
+import { lazy } from 'react';
 import { BrowserRouter, Route, Routes } from 'react-router-dom';
 import { AppShell } from './components/AppShell';
 import { PaimonCompanion, PaimonProvider } from './components/PaimonCompanion';
-import { DashboardPage } from './pages/DashboardPage';
-import { CharactersPage } from './pages/CharactersPage';
-import { CharacterPage } from './pages/CharacterPage';
-import { TeamsPage } from './pages/TeamsPage';
-import { GuidesPage } from './pages/GuidesPage';
-import { SourcesPage } from './pages/SourcesPage';
-import { LibraryPage } from './pages/LibraryPage';
-import { MapPage } from './pages/MapPage';
-import { MaterialsPage } from './pages/MaterialsPage';
-import { AccountPage } from './pages/AccountPage';
-import { ComparePage } from './pages/ComparePage';
-import { ProfilePage } from './pages/ProfilePage';
-import { ShowcaseCharacterPage } from './pages/ShowcaseCharacterPage';
+const DashboardPage = lazy(() => import('./pages/DashboardPage').then((module) => ({ default: module.DashboardPage })));
+const CharactersPage = lazy(() => import('./pages/CharactersPage').then((module) => ({ default: module.CharactersPage })));
+const CharacterPage = lazy(() => import('./pages/CharacterPage').then((module) => ({ default: module.CharacterPage })));
+const TeamsPage = lazy(() => import('./pages/TeamsPage').then((module) => ({ default: module.TeamsPage })));
+const GuidesPage = lazy(() => import('./pages/GuidesPage').then((module) => ({ default: module.GuidesPage })));
+const SourcesPage = lazy(() => import('./pages/SourcesPage').then((module) => ({ default: module.SourcesPage })));
+const LibraryPage = lazy(() => import('./pages/LibraryPage').then((module) => ({ default: module.LibraryPage })));
+const MapPage = lazy(() => import('./pages/MapPage').then((module) => ({ default: module.MapPage })));
+const MaterialsPage = lazy(() => import('./pages/MaterialsPage').then((module) => ({ default: module.MaterialsPage })));
+const AccountPage = lazy(() => import('./pages/AccountPage').then((module) => ({ default: module.AccountPage })));
+const ComparePage = lazy(() => import('./pages/ComparePage').then((module) => ({ default: module.ComparePage })));
+const ProfilePage = lazy(() => import('./pages/ProfilePage').then((module) => ({ default: module.ProfilePage })));
+const ShowcaseCharacterPage = lazy(() => import('./pages/ShowcaseCharacterPage').then((module) => ({ default: module.ShowcaseCharacterPage })));
 
 export default function App() {
   return (

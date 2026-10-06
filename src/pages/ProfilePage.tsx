@@ -17,7 +17,7 @@ export function ProfilePage() {
   const [inputError, setInputError] = useState('');
   const [importMessage, setImportMessage] = useState('');
   const { profile, loading, error, metadata, metadataError, metadataLoading, retry } = useEnkaProfile(selectedUid);
-  const { allCharacters } = useCharacters('');
+  const { allCharacters } = useCharacters('', Boolean(selectedUid));
   const player = profile?.playerInfo;
   const avatars = profile?.avatarInfoList ?? [];
   const matched = useMemo(() => avatars.flatMap((avatar) => {
@@ -56,7 +56,7 @@ export function ProfilePage() {
       <label htmlFor="profile-uid">Genshin UID</label>
       <div><input id="profile-uid" value={uid} onChange={(event) => { setUid(event.target.value); setInputError(''); }} inputMode="numeric" autoComplete="off" maxLength={10} placeholder="9 or 10-digit UID" aria-invalid={Boolean(inputError)} aria-describedby="uid-help" required /><button className="button primary" disabled={loading}><Search size={16} />{loading ? 'Loading…' : 'Search UID'}</button></div>
     </form>
-    <p className="muted" id="uid-help">Only public showcase characters can be loaded. Enable “Show Character Details” in your in-game profile. Public lookups may use the Jina reader if Enka is unavailable.</p>
+    <p className="muted" id="uid-help">Only public showcase characters can be loaded. Enable “Show Character Details” in your in-game profile to share their builds.</p>
     {(inputError || error) && <div className="error-box" role="alert"><strong>Lookup failed.</strong><p>{inputError || error}</p>{error && <button type="button" className="button secondary" onClick={retry}>Try again</button>}</div>}
     {loading && <div className="loading" role="status">Loading public profile…</div>}
     {!selectedUid && <div className="uid-welcome panel"><div className="uid-welcome__emblem"><ShieldCheck size={38} /></div><h3>Your adventure, at a glance</h3><p>See a player’s public profile, achievements, namecards, and equipped showcase builds.</p><span>No game password needed. Only public information is shown.</span></div>}
@@ -64,7 +64,7 @@ export function ProfilePage() {
       <ProfileOverview profile={profile} metadata={metadata} uid={selectedUid ?? ''} />
       <section className="section-block"><SectionTitle eyebrow="CHARACTER SHOWCASE" title="Equipped builds" description="Select a character to see combat stats, talent levels, constellations, weapon, and every shared artifact." action={matched.length > 0 && <button type="button" className="button secondary" onClick={importRoster}>Add showcase to My Roster</button>} />
         {importMessage && <p role="status" className="muted">{importMessage}</p>}
-        {metadataLoading && <p className="muted">Loading character names and equipment definitions…</p>}
+        {metadataLoading && <p className="muted">Loading character and equipment details…</p>}
         {metadataError && <p className="muted">Names and images could not load. Build stats remain available. <button className="text-button" type="button" onClick={retry}>Retry</button></p>}
         {avatars.length ? <div className="showcase-grid">{avatars.map((avatar) => <Link className="showcase-card showcase-card--link" key={avatarKey(avatar)} to={`/profile/${selectedUid}/characters/${avatarKey(avatar)}`}>
           <AsyncImage src={avatarImage(avatar, metadata)} alt="" className="showcase-card__image" assetKey={`characters:${avatarKey(avatar)}:icon`} fallback={<AssetPlaceholder kind="character" />} />

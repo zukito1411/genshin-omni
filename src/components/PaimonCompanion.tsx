@@ -10,35 +10,14 @@ import {
 } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { PaimonLauncher } from './PaimonLauncher';
+import { PaimonSprite, type PaimonAction } from './PaimonSprite';
+import { usePageActive } from '../hooks/usePageActive';
 
-type PaimonAction =
-  | 'idle'
-  | 'running-right'
-  | 'running-left'
-  | 'waving'
-  | 'jumping'
-  | 'failed'
-  | 'waiting'
-  | 'running'
-  | 'review'
-  ;
-
-export type PaimonPage =
-  | 'dashboard'
-  | 'characters'
-  | 'character'
-  | 'weapons'
-  | 'weapon'
-  | 'artifacts'
-  | 'artifact'
-  | 'teams'
-  | 'materials'
-  | 'compare'
-  | 'account'
-  | 'profile'
-  | 'map'
-  | 'guides'
-  | 'sources';
+export type { PaimonPage } from '../paimon/types';
+import type { PaimonPage, PaimonReply as PaimonHelpReply } from '../paimon/types';
+import { getPaimonHelpReply } from '../paimon/knowledge';
+import type { LocalAssistant, PreparedReply } from '../paimon/localPaimon';
+import { containsCredential } from '../paimon/safety';
 
 type PaimonContextState = {
   page: PaimonPage;
@@ -186,79 +165,16 @@ function buildElementLines(label: string): string[] {
   ];
 }
 
-type PaimonHelpReply = {
-  text: string;
-  route?: string;
-  actionLabel?: string;
-  source?: 'ai' | 'native';
-};
-
-function getPaimonHelpReply(question: string, page: PaimonPage, name?: string): PaimonHelpReply {
-  const query = question.trim().toLowerCase();
-  const now = new Date();
-  if (/\bhow are you\b|\bare you okay\b/.test(query)) {
-    return { text: randomItem(['Paimon is doing great! Thanks for asking, Traveler!', 'Paimon is feeling sparkly and ready to help!', 'Paimon is good! A little hungry, but good!']) };
-  }
-  if (/\b(what(?:\'s| is)? the )?time\b|\btime is it\b/.test(query)) {
-    return { text: `It’s ${new Intl.DateTimeFormat(undefined, { hour: 'numeric', minute: '2-digit' }).format(now)} on your device.` };
-  }
-  if (/\b(today|date|day is it)\b/.test(query)) {
-    return { text: `Today is ${new Intl.DateTimeFormat(undefined, { weekday: 'long', month: 'long', day: 'numeric' }).format(now)}.` };
-  }
-  if (/^(hi|hello|hey|yo)\b/.test(query)) {
-    return { text: randomItem(['Hi, Traveler! What are we working on?', 'Hello! Paimon is ready!', 'Hey! Need a hand with your adventure?']) };
-  }
-  if (/\bwho are you\b|\bwhat are you\b/.test(query)) {
-    return { text: 'Paimon is your Teyvat Atlas helper! Paimon can point you to builds, materials, teams, comparisons, your roster, and the map.' };
-  }
-  if (/\bthank(s| you)\b/.test(query)) {
-    return { text: 'You’re welcome! Paimon is happy to help!' };
-  }
-  if (/\b(joke|funny)\b/.test(query)) {
-    return { text: 'Why did the Hilichurl bring a ladder? It heard the Adventure Rank was going up!' };
-  }
-  if (/\b(bye|goodbye|see you)\b/.test(query)) {
-    return { text: 'See you later, Traveler! Don’t forget your resin!' };
-  }
-  if (/farm|material|resin|domain|boss/.test(query)) {
-    return { text: 'Let’s make a farming checklist from the characters you want to raise.', route: '/materials', actionLabel: 'Open Farming Plan' };
-  }
-  if (/team|reaction|resonance|rotation|party/.test(query)) {
-    return { text: 'Pick four characters, assign their roles, then check the reaction and resonance hints.', route: '/teams', actionLabel: 'Open Team Builder' };
-  }
-  if (/compare|versus| vs |better/.test(query)) {
-    return { text: 'The comparison tool puts progression and sourced build guidance side by side.', route: '/compare', actionLabel: 'Compare Characters' };
-  }
-  if (/uid|showcase|profile/.test(query)) {
-    return { text: 'Search a UID, then choose a public showcase character to see their equipped stats, weapons, and artifacts.', route: '/profile', actionLabel: 'Open UID Search' };
-  }
-  if (/roster|own|owned|account/.test(query)) {
-    return { text: 'You can mark your roster locally, or look up the public characters a UID has chosen to showcase.', route: '/account', actionLabel: 'Open My Roster' };
-  }
-  if (/weapon|artifact|build|talent|constellation/.test(query)) {
-    if (page === 'character' && name) return { text: `You’re already viewing ${name}. Try Build & Teams, then Skills or Materials for the next decision.` };
-    return { text: 'Open a character to see their current build sources, talents, materials, weapons, and artifact options.', route: '/characters', actionLabel: 'Browse Characters' };
-  }
-  if (/map|explore|chest|waypoint/.test(query)) {
-    return { text: 'The official interactive map has the most complete current exploration filters.', route: '/map', actionLabel: 'Open Map' };
-  }
-  if (page === 'materials') return { text: 'Choose characters first, then Build checklist. Paimon only shows a farming day when the source actually provides one.' };
-  if (page === 'teams') return { text: 'Give each teammate the role you intend them to perform. The advisor then checks coverage and possible reactions without guessing your builds.' };
-  if (page === 'compare') return { text: 'Choose a character on each side. Paimon will line up progression and current sourced build guidance.' };
-  if (page === 'account') return { text: 'Your local roster stays in this browser. A UID can only show the account’s public Enka showcase.' };
-  if (page === 'profile') return { text: 'Search a UID, then select a showcase character to inspect their build. The player needs to enable public character details in-game.' };
-  return { text: 'Ask Paimon about materials, teams, comparisons, your roster, builds, or exploration!' };
-}
 
 export function PaimonCompanion() {
   const { page, name, shown } = usePaimonContext();
   const navigate = useNavigate();
   const disabled = page === 'map';
+  const pageActive = usePageActive();
 
   const [visible, setVisible] = useState(true);
   const [presence, setPresence] = useState<'visible' | 'entering' | 'exiting'>('visible');
   const [action, setAction] = useState<PaimonAction>('idle');
-  const [frame, setFrame] = useState(0);
   const [position, setPosition] = useState({ x: 74, y: 65 });
   const [isAfk, setIsAfk] = useState(false);
   const [afkHidden, setAfkHidden] = useState(false);
@@ -284,23 +200,13 @@ export function PaimonCompanion() {
   const afkBoredCountRef = useRef(0);
   const helperRequestRef = useRef(0);
   const helperAbortRef = useRef<AbortController | null>(null);
+  const aiCooldownRef = useRef(0);
 
   visibleRef.current = visible;
   isAfkRef.current = isAfk;
   presenceRef.current = presence;
   afkHiddenRef.current = afkHidden;
 
-  const spriteRows: Record<PaimonAction, number> = {
-    idle: 0,
-    'running-right': 1,
-    'running-left': 2,
-    waving: 3,
-    jumping: 4,
-    failed: 5,
-    waiting: 7,
-    running: 1,
-    review: 6,
-  };
 
   function clearActionTimeout() {
     if (actionTimeoutRef.current !== null) {
@@ -596,7 +502,6 @@ export function PaimonCompanion() {
     clearActionTimeout();
     clearMovementTimeout();
     actionBusyRef.current = true;
-    setFrame(0);
     setAction(nextAction);
     // Show the reaction line right away instead of leaving the old speech
     // bubble up for the whole animation and only revealing it at the end.
@@ -604,7 +509,6 @@ export function PaimonCompanion() {
 
     actionTimeoutRef.current = window.setTimeout(() => {
       actionBusyRef.current = false;
-      setFrame(0);
       setAction('idle');
       say(getRandomPaimonLine());
       actionTimeoutRef.current = null;
@@ -627,8 +531,6 @@ export function PaimonCompanion() {
       clearNormalBehaviorTimeout();
       actionBusyRef.current = false;
       afkBoredCountRef.current = 0;
-
-      setFrame(0);
       setAction('waiting');
       say(pickSpeech([
         'Traveler...?',
@@ -641,7 +543,7 @@ export function PaimonCompanion() {
   }
 
   function moveToRandomSpot() {
-    if (disabled || !shown || !visibleRef.current || presenceRef.current !== 'visible' || actionBusyRef.current) {
+    if (!pageActive || disabled || !shown || !visibleRef.current || presenceRef.current !== 'visible' || actionBusyRef.current) {
       return;
     }
 
@@ -660,11 +562,9 @@ export function PaimonCompanion() {
       const next = randomItem(candidates.length ? candidates : spots);
 
       clearMovementTimeout();
-      setFrame(next.x > current.x ? 0 : 6);
       setAction(next.x > current.x ? 'running-right' : 'running-left');
 
       movementTimeoutRef.current = window.setTimeout(() => {
-        setFrame(0);
         setAction((currentAction) =>
           currentAction === 'running-right' || currentAction === 'running-left'
             ? 'idle'
@@ -713,10 +613,10 @@ export function PaimonCompanion() {
     )
       .filter((element) => {
         if (element.closest('[data-paimon-companion]')) return false;
-        const rect = element.getBoundingClientRect();
-        return rect.width > 0 && rect.height > 0 && rect.bottom > 0 && rect.right > 0;
+        return true;
       })
-      .map((element) => element.getBoundingClientRect());
+      .map((element) => element.getBoundingClientRect())
+      .filter((rect) => rect.width > 0 && rect.height > 0 && rect.bottom > 0 && rect.right > 0 && rect.top < window.innerHeight && rect.left < window.innerWidth);
   }
 
   function moveNearElement(element: Element) {
@@ -813,7 +713,6 @@ export function PaimonCompanion() {
     // Important: do not animate into the clicked control.
     // Paimon snaps to the safe location instead of flying through the button.
     clearMovementTimeout();
-    setFrame(0);
     setAction('idle');
     setPosition({
       x: (targetPosition.left / viewportWidth) * 100,
@@ -822,7 +721,7 @@ export function PaimonCompanion() {
   }
 
   function runNormalBehavior() {
-    if (disabled || !shown || !visibleRef.current || isAfkRef.current || presenceRef.current !== 'visible' || actionBusyRef.current) {
+    if (!pageActive || disabled || !shown || !visibleRef.current || isAfkRef.current || presenceRef.current !== 'visible' || actionBusyRef.current) {
       return;
     }
 
@@ -888,7 +787,7 @@ export function PaimonCompanion() {
 
   function scheduleNextNormalBehavior() {
     clearNormalBehaviorTimeout();
-    if (disabled || !shown || !visibleRef.current || isAfkRef.current || presenceRef.current !== 'visible') return;
+    if (!pageActive || disabled || !shown || !visibleRef.current || isAfkRef.current || presenceRef.current !== 'visible') return;
 
     normalBehaviorTimeoutRef.current = window.setTimeout(() => {
       runNormalBehavior();
@@ -916,7 +815,7 @@ export function PaimonCompanion() {
   }
 
   function reactToSiteInteraction(element: Element) {
-    if (disabled || !shown || !visibleRef.current || presenceRef.current !== 'visible') return;
+    if (!pageActive || disabled || !shown || !visibleRef.current || presenceRef.current !== 'visible') return;
 
     const interactive = element.closest(
       'button, a, select, input, textarea, [role="button"]',
@@ -952,7 +851,6 @@ export function PaimonCompanion() {
     clearActionTimeout();
     clearMovementTimeout();
     actionBusyRef.current = true;
-    setFrame(0);
     setAction('jumping');
     say(pickSpeech([
       'Paimon is awake!',
@@ -964,7 +862,6 @@ export function PaimonCompanion() {
 
     actionTimeoutRef.current = window.setTimeout(() => {
       actionBusyRef.current = false;
-      setFrame(0);
       setAction('idle');
       actionTimeoutRef.current = null;
       resetAfkTimer();
@@ -996,7 +893,6 @@ export function PaimonCompanion() {
       clearPresenceTimeouts();
       actionBusyRef.current = true;
       setIsAfk(false);
-      setFrame(0);
       say('ENOUGH! Leave Paimon alone!');
       setAction('failed');
       setPresence('exiting');
@@ -1010,7 +906,6 @@ export function PaimonCompanion() {
       popInTimeoutRef.current = window.setTimeout(() => {
         if (disabled) return;
         setVisible(true);
-        setFrame(0);
         setAction('idle');
         say(Math.random() < 0.5 ? 'Paimon is back...' : getRandomPaimonLine());
         setPresence('entering');
@@ -1032,13 +927,11 @@ export function PaimonCompanion() {
       resetAfkTimer();
       actionBusyRef.current = true;
       setIsAfk(false);
-      setFrame(0);
       say(getAngryLine(clickCount));
       setAction('failed');
 
       actionTimeoutRef.current = window.setTimeout(() => {
         actionBusyRef.current = false;
-        setFrame(0);
         setAction('idle');
         say(getRandomPaimonLine());
         actionTimeoutRef.current = null;
@@ -1066,63 +959,82 @@ export function PaimonCompanion() {
     clearActionTimeout();
     clearMovementTimeout();
     actionBusyRef.current = true;
-    setFrame(0);
     setAction('waving');
     say(reply.text);
     // Keep a requested answer in Paimon's speech bubble. The helper panel
     // retains it too, so an animation cannot make an answer disappear.
     actionTimeoutRef.current = window.setTimeout(() => {
       actionBusyRef.current = false;
-      setFrame(0);
       setAction('idle');
       actionTimeoutRef.current = null;
     }, 6000);
   }
 
-  async function askPaimon(question: string) {
-    const fallbackReply = getPaimonHelpReply(question, page, name);
-    const requestId = helperRequestRef.current + 1;
-    helperRequestRef.current = requestId;
+  async function askPaimon(rawQuestion: string) {
+    const question = rawQuestion.trim().slice(0, 600);
+    const requestId = ++helperRequestRef.current;
     helperAbortRef.current?.abort();
-
     const controller = new AbortController();
     helperAbortRef.current = controller;
-    let timedOut = false;
-    const timeout = window.setTimeout(() => { timedOut = true; controller.abort(); }, 18_000);
     setHelperQuestion(question);
+    if (containsCredential(question)) {
+      setHelperStatus('native');
+      showHelperReply({ text: 'Please keep passwords, API keys, tokens, and private keys out of chat, Traveler. Paimon will not save this message or send it to the AI provider.', source: 'native' });
+      helperAbortRef.current = null;
+      return;
+    }
     setHelperStatus('thinking');
-    showHelperReply({ text: 'Paimon is thinking...', source: 'ai' });
-
+    showHelperReply({ text: 'Paimon is thinking...', source: 'native' });
+    let local: LocalAssistant | undefined;
+    let prepared: PreparedReply = { reply: getPaimonHelpReply(question, page, name), handled: false, journal: false };
+    let delivered = false;
+    const deliver = (reply: PaimonHelpReply) => {
+      if (requestId !== helperRequestRef.current || delivered) return;
+      delivered = true;
+      setHelperStatus(reply.source === 'ai' ? 'ai' : 'native');
+      showHelperReply(reply);
+      if (prepared.journal) void local?.record(question, reply, reply.source === 'native' ? prepared.mathValue : undefined).catch(() => undefined);
+    };
+    // Bound the whole request, including lazy-code/storage loading, not just fetch.
+    const timeout = window.setTimeout(() => {
+      controller.abort();
+      if (requestId !== helperRequestRef.current) return;
+      aiCooldownRef.current = Date.now() + 60_000;
+      deliver({ ...prepared.reply, source: 'native' });
+      helperAbortRef.current = null;
+    }, 18_000);
     try {
-      const localTime = new Intl.DateTimeFormat(undefined, {
-        dateStyle: 'full',
-        timeStyle: 'short',
-      }).format(new Date());
+      try {
+        const module = await import('../paimon/localPaimon');
+        local = await module.getLocalPaimon();
+        if (requestId !== helperRequestRef.current || controller.signal.aborted) return;
+        prepared = await local.prepare(question, { page, name });
+      } catch { /* The original guide remains usable if local code/storage is unavailable. */ }
+      if (requestId !== helperRequestRef.current || controller.signal.aborted) return;
+      if (prepared.handled || window.navigator.onLine === false || aiCooldownRef.current > Date.now()) {
+        deliver({ ...prepared.reply, source: 'native' });
+        return;
+      }
+      const localTime = new Intl.DateTimeFormat(undefined, { dateStyle: 'full', timeStyle: 'short' }).format(new Date());
       const response = await fetch('/api/paimon-chat', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ question, page, name, localTime }),
-        signal: controller.signal,
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        // Notebook/history deliberately stay local; only this message goes upstream.
+        body: JSON.stringify({ question, page, name, localTime }), signal: controller.signal,
       });
+      if (!response.ok) throw new Error('AI response unavailable');
       const payload = await response.json() as { reply?: unknown };
       const reply = typeof payload.reply === 'string' ? payload.reply.trim() : '';
-
-      if (!response.ok || !reply) {
-        throw new Error('AI response unavailable');
-      }
-
+      if (!reply) throw new Error('AI response unavailable');
       if (helperRequestRef.current !== requestId) return;
-      setHelperStatus('ai');
-      showHelperReply({ ...fallbackReply, text: reply, source: 'ai' });
+      aiCooldownRef.current = 0;
+      deliver({ ...prepared.reply, text: reply, source: 'ai' });
     } catch {
-      if ((!timedOut && controller.signal.aborted) || helperRequestRef.current !== requestId) return;
-      setHelperStatus('native');
-      showHelperReply({ ...fallbackReply, source: 'native' });
+      if (controller.signal.aborted || helperRequestRef.current !== requestId) return;
+      aiCooldownRef.current = Date.now() + 60_000;
+      deliver({ ...prepared.reply, source: 'native' });
     } finally {
       window.clearTimeout(timeout);
-      if (helperRequestRef.current === requestId) {
-        helperAbortRef.current = null;
-      }
+      if (helperRequestRef.current === requestId) helperAbortRef.current = null;
     }
   }
 
@@ -1142,46 +1054,9 @@ export function PaimonCompanion() {
     say('Right this way, Traveler!');
   }
 
-  useEffect(() => {
-    if (!visible || disabled || !shown) return;
-
-    const frameSequences: Record<PaimonAction, number[]> = {
-      idle: [0, 1, 2, 4, 2, 3, 6, 7],
-      'running-right': [0, 1, 2, 3, 4, 5, 6, 7],
-      'running-left': [0, 1, 2, 3, 4, 5, 6, 7],
-      waving: [5, 1, 2, 3, 4, 5, 6, 5],
-      jumping: [0, 1, 2, 3, 4, 5, 6, 7],
-      failed: [0, 1, 2, 3, 4, 5, 6, 7],
-      waiting: [0, 1, 2, 3, 4, 5, 6, 7],
-      running: [0, 1, 2, 3, 4, 5, 6, 7],
-      review: [0, 1, 2, 3, 4, 5, 6, 7],
-    };
-
-    const sequence = frameSequences[action];
-    let sequenceIndex = 0;
-    setFrame(sequence[0]);
-
-    const frameInterval =
-      action === 'waiting'
-        ? 220
-        : action === 'review'
-          ? 180
-          : action === 'idle'
-            ? 170
-            : action === 'running-right' || action === 'running-left'
-              ? 150
-              : 125;
-
-    const interval = window.setInterval(() => {
-      sequenceIndex = (sequenceIndex + 1) % sequence.length;
-      setFrame(sequence[sequenceIndex]);
-    }, frameInterval);
-
-    return () => window.clearInterval(interval);
-  }, [action, visible, disabled, shown]);
 
   useEffect(() => {
-    if (!shown) {
+    if (!shown || !pageActive) {
       clearActionTimeout();
       clearMovementTimeout();
       clearAfkTimeout();
@@ -1189,7 +1064,6 @@ export function PaimonCompanion() {
       clearPresenceTimeouts();
       actionBusyRef.current = false;
       setAction('idle');
-      setFrame(0);
       setAfkHidden(false);
       setIsAfk(false);
       return;
@@ -1203,7 +1077,6 @@ export function PaimonCompanion() {
       clearPresenceTimeouts();
       actionBusyRef.current = false;
       setAction('idle');
-      setFrame(0);
       setAfkHidden(false);
       setIsAfk(false);
       return;
@@ -1213,16 +1086,16 @@ export function PaimonCompanion() {
     resetAfkTimer();
 
     return () => clearAfkTimeout();
-  }, [visible, disabled, shown]);
+  }, [visible, disabled, shown, pageActive]);
 
   useEffect(() => {
-    if (disabled || !shown || !visible || isAfk || presence !== 'visible') return;
+    if (!pageActive || disabled || !shown || !visible || isAfk || presence !== 'visible') return;
     scheduleNextNormalBehavior();
     return () => clearNormalBehaviorTimeout();
-  }, [visible, isAfk, presence, disabled, shown, page, name]);
+  }, [visible, isAfk, presence, disabled, shown, page, name, pageActive]);
 
   useEffect(() => {
-    if (disabled || !shown || !visible || presence !== 'visible') return;
+    if (!pageActive || disabled || !shown || !visible || presence !== 'visible') return;
 
     const lines = getContextLines();
     if (!lines.length) return;
@@ -1230,30 +1103,28 @@ export function PaimonCompanion() {
     clearActionTimeout();
     clearMovementTimeout();
     actionBusyRef.current = true;
-    setFrame(0);
     setAction('waving');
     say(pickSpeech(lines));
 
     actionTimeoutRef.current = window.setTimeout(() => {
       actionBusyRef.current = false;
-      setFrame(0);
       setAction('idle');
       actionTimeoutRef.current = null;
     }, 1400);
   }, [page, name, disabled, shown]);
 
   useEffect(() => {
-    if (disabled || !shown || !visible || presence !== 'visible') return;
+    if (!pageActive || disabled || !shown || !visible || presence !== 'visible') return;
 
     const interval = window.setInterval(() => {
       moveToRandomSpot();
     }, 8000);
 
     return () => window.clearInterval(interval);
-  }, [visible, presence, disabled, shown]);
+  }, [visible, presence, disabled, shown, pageActive]);
 
   useEffect(() => {
-    if (disabled || !shown || !visible || !isAfk || afkHidden || presence !== 'visible') return;
+    if (!pageActive || disabled || !shown || !visible || !isAfk || afkHidden || presence !== 'visible') return;
 
     const interval = window.setInterval(() => {
       if (actionBusyRef.current) return;
@@ -1264,7 +1135,6 @@ export function PaimonCompanion() {
       if (afkBoredCountRef.current > PAIMON_AFK_BORED_CYCLES) {
         clearActionTimeout();
         actionBusyRef.current = true;
-        setFrame(0);
         setAction('waiting');
         say(pickSpeech([
           'Paimon is getting sleepy... see you in a bit.',
@@ -1283,7 +1153,6 @@ export function PaimonCompanion() {
           setVisible(false);
           setPresence('visible');
           setAction('idle');
-          setFrame(0);
           actionBusyRef.current = false;
         }, 1800);
         return;
@@ -1306,7 +1175,7 @@ export function PaimonCompanion() {
     }, 7000);
 
     return () => window.clearInterval(interval);
-  }, [isAfk, visible, presence, disabled, shown, afkHidden]);
+  }, [isAfk, visible, presence, disabled, shown, afkHidden, pageActive]);
 
   useEffect(() => {
     const handleDocumentClick = (event: MouseEvent) => {
@@ -1393,17 +1262,13 @@ export function PaimonCompanion() {
 
   if (disabled || !shown) return null;
 
-  const row = spriteRows[action];
-  const backgroundX = frame * 256;
-  const backgroundY = row * 256;
 
   return (
     <>
       {visible && !afkHidden && <div
       className={`paimon-companion paimon-companion--${presence}`}
       style={{
-        left: `${position.x}%`,
-        top: `${position.y}%`,
+        transform: `translate(${position.x}vw, ${position.y}vh)`,
         pointerEvents: 'none',
       }}
       data-paimon-companion
@@ -1439,13 +1304,7 @@ export function PaimonCompanion() {
         data-paimon-button
         onClick={handlePaimonClick}
       >
-        <div
-          className="paimon-companion__sprite"
-          style={{
-            pointerEvents: 'none',
-            backgroundPosition: `-${backgroundX}px -${backgroundY}px`,
-          }}
-        />
+        <PaimonSprite action={action} active={pageActive} />
       </button>
       </div>}
 
@@ -1465,7 +1324,7 @@ export function PaimonCompanion() {
           <div><input id="paimon-helper-question" value={helperQuestion} onChange={(event) => setHelperQuestion(event.target.value)} placeholder="Materials, teams, roster…" maxLength={600} /><button type="submit" disabled={helperStatus === 'thinking'}>{helperStatus === 'thinking' ? 'Thinking…' : 'Ask'}</button></div>
         </form>
         {helperReply?.route && <button type="button" className="button primary paimon-helper__action" data-paimon-help onClick={useHelperAction}>{helperReply.actionLabel ?? 'Open tool'}</button>}
-        <small>{helperStatus === 'thinking' ? 'Asking AI Paimon…' : helperReply?.source === 'ai' ? 'AI Paimon is answering. Your message was sent to the configured AI provider.' : 'Built-in Paimon is answering. AI is unavailable or has not been configured.'}</small>
+        <small>{helperStatus === 'thinking' ? 'Paimon is thinking…' : helperReply?.source === 'ai' ? 'AI Paimon is answering. This message was sent to the configured AI provider; the local journal is not shared.' : 'Built-in Paimon keeps notes and recent conversations in this browser. Ask “memory help” for saving and deletion commands. Saved notes and history are not sent to the AI provider.'}</small>
       </aside>}
     </>
   );

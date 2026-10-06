@@ -1,12 +1,12 @@
 const PREFIX = 'teyvat-atlas:v5:';
 interface Entry<T>{expiresAt:number;value:T;updatedAt:number}
-export function readCache<T>(key:string):{value:T;stale:boolean;updatedAt:number}|null{
+export function readCache<T>(key:string):{value:T;stale:boolean;updatedAt:number;expiresAt:number}|null{
   try{
     const raw=localStorage.getItem(PREFIX+key);
     if(!raw)return null;
     const entry=JSON.parse(raw) as Entry<T>;
     if(!entry || typeof entry !== 'object' || !Object.prototype.hasOwnProperty.call(entry,'value') || !Number.isFinite(entry.expiresAt) || !Number.isFinite(entry.updatedAt))return null;
-    return {value:entry.value,stale:Date.now()>entry.expiresAt,updatedAt:entry.updatedAt};
+    return {value:entry.value,stale:Date.now()>entry.expiresAt,updatedAt:entry.updatedAt,expiresAt:entry.expiresAt};
   }catch{return null}
 }
 export function writeCache<T>(key:string,value:T,ttlMs:number):void{

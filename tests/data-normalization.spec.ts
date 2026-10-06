@@ -3,6 +3,7 @@ import { combinedKitLists, fillKitArtwork, needsKitArtwork } from '../src/utils/
 import { extractConstellations, extractTalents } from '../src/utils/genshin';
 import { gameText } from '../src/utils/gameText';
 import { normalizeCharacter, normalizeEntity } from '../src/utils/normalize';
+import { mapConcurrent } from '../src/utils/concurrency';
 
 test('kit records keep root artwork, sparse constellation levels and complementary fields', () => {
   const primary = {
@@ -55,4 +56,21 @@ test('missing kit artwork uses exact combat slots and never invents passive icon
   expect(enriched.talents[1].icon).toBeUndefined();
   expect(enriched.constellations[0].icon).toBe('C6');
   expect(needsKitArtwork(enriched.talents, enriched.constellations)).toBe(false);
+});
+
+test('worker pools preserve ordering, bound concurrency and stop queued work on cancellation', async () => {
+  let running = 0;
+  let maximum = 0;
+  const results = await mapConcurrent([1, 2, 3, 4, 5, 6], 2, async (value) => {
+    maximum = Math.max(maximum, ++running);
+    await new Promise((resolve) => setTimeout(resolve, 5));
+    running--;
+    return value * 2;
+  });
+  expect(maximum).toBe(2);
+  expect(results).toEqual([2, 4, 6, 8, 10, 12]);
+  const controller = new AbortController();
+  const visited: number[] = [];
+  await expect(mapConcurrent([1, 2, 3], 1, async (value) => { visited.push(value); controller.abort(); return value; }, controller.signal)).rejects.toMatchObject({ name: 'AbortError' });
+  expect(visited).toEqual([1]);
 });

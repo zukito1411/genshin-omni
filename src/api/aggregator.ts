@@ -6,13 +6,23 @@ import { fetchEnkaCharacters } from './enka';
 
 const characterMemory = new Map<string, { value: AggregatedCharacter; expiresAt: number }>();
 const characterRequests = new Map<string, Promise<AggregatedCharacter>>();
+const characterUpdates = new Map<string, Set<(value: AggregatedCharacter) => void>>();
+const partialCharacters = new Map<string, AggregatedCharacter>();
 
-export async function fetchAggregatedCharacter(query: string, signal?: AbortSignal): Promise<AggregatedCharacter> {
+export async function fetchAggregatedCharacter(query: string, signal?: AbortSignal, onUpdate?: (value: AggregatedCharacter) => void): Promise<AggregatedCharacter> {
   const key = query.trim().toLowerCase();
   const cached = characterMemory.get(key);
-  if (cached && cached.expiresAt > Date.now()) return cached.value;
+  if (cached && cached.expiresAt > Date.now()) { if (!signal?.aborted) onUpdate?.(cached.value); return cached.value; }
+  const listener = (value: AggregatedCharacter) => { if (!signal?.aborted) onUpdate?.(value); };
+  const listeners = characterUpdates.get(key) ?? new Set();
+  if (onUpdate) { listeners.add(listener); characterUpdates.set(key, listeners); }
+  const stopListening = () => listeners.delete(listener);
+  signal?.addEventListener('abort', stopListening, { once: true });
+  const finish = () => { stopListening(); signal?.removeEventListener('abort', stopListening); };
+  const partial = partialCharacters.get(key);
+  if (partial) listener(partial);
   const shared = characterRequests.get(key);
-  if (shared) return shared;
+  if (shared) return shared.finally(finish);
   const request = (async () => {
     // This complete character record is shared and cached across navigation. Do
     // not bind it to a page-owned abort signal, or React's route cleanup can
@@ -23,11 +33,25 @@ export async function fetchAggregatedCharacter(query: string, signal?: AbortSign
       /^traveler[-\s]+(?:anemo|geo|electro|dendro|hydro|pyro|cryo)$/i.test(query)
         ? query
         : base.name || query;
+    let current: AggregatedCharacter = { ...base, stats: {}, secondary: {}, sources: [] };
+    const publish = () => {
+      partialCharacters.set(key, current);
+      for (const update of characterUpdates.get(key) ?? []) update(current);
+    };
+    publish();
+    const hydrate = async <T,>(field: string, promise: Promise<T>): Promise<T> => {
+      const value = await promise;
+      current = field === 'stats'
+        ? { ...current, stats: value as Record<string, unknown> }
+        : { ...current, secondary: { ...current.secondary, [field]: value } };
+      publish();
+      return value;
+    };
     const [stats, secondary, talents, constellations] = await Promise.allSettled([
-      fetchStats('characters', detailQuery),
-      fetchEntityDetail('characters', detailQuery),
-      fetchFolder('talents', detailQuery),
-      fetchFolder('constellations', detailQuery),
+      hydrate('stats', fetchStats('characters', detailQuery)),
+      hydrate('dev', fetchEntityDetail('characters', detailQuery)),
+      hydrate('talents', fetchFolder('talents', detailQuery)),
+      hydrate('constellations', fetchFolder('constellations', detailQuery)),
     ]);
     const dev = secondary.status === 'fulfilled' && secondary.value && typeof secondary.value === 'object' ? secondary.value : {};
     const kitTalents = combinedKitLists(['talents', 'skillTalents', 'passiveTalents'], talents.status === 'fulfilled' ? talents.value : null, base.raw, dev);
@@ -51,6 +75,8 @@ export async function fetchAggregatedCharacter(query: string, signal?: AbortSign
         { provider: 'genshin.dev / public image CDNs', url: 'https://github.com/genshindev/api', fetchedAt: Date.now() },
       ],
     };
+    current = result;
+    publish();
     // Keep retrying incomplete enrichments on future calls. A transient source
     // failure must not become the permanent in-memory representation of a
     // character for the rest of the session.
@@ -58,7 +84,7 @@ export async function fetchAggregatedCharacter(query: string, signal?: AbortSign
       characterMemory.set(key, { value: result, expiresAt: Date.now() + 6 * 60 * 60 * 1000 });
     }
     return result;
-  })().finally(() => characterRequests.delete(key));
+  })().finally(() => { characterRequests.delete(key); partialCharacters.delete(key); characterUpdates.delete(key); });
   characterRequests.set(key, request);
-  return request;
+  return request.finally(finish);
 }

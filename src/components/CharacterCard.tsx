@@ -2,10 +2,11 @@ import { Link } from 'react-router-dom';
 import { assetKey, characterImageSources, elementImageSources } from '../api/genshinDev';
 import type { GenshinCharacter } from '../types/genshin';
 import { AsyncImage } from './AsyncImage';
+import { memo } from 'react';
 
 const elementClass = (element?: string) => `element-${(element ?? 'unknown').toLowerCase()}`;
 
-export function CharacterCard({ character, selected = false, onSelect }: { character: GenshinCharacter; selected?: boolean; onSelect?: (character: GenshinCharacter) => void }) {
+export const CharacterCard = memo(function CharacterCard({ character, selected = false, onSelect }: { character: GenshinCharacter; selected?: boolean; onSelect?: (character: GenshinCharacter) => void }) {
   const routeKey = character.name || character.id;
   const imageSources = characterImageSources(character, 'card');
   const content = <>
@@ -22,4 +23,4 @@ export function CharacterCard({ character, selected = false, onSelect }: { chara
 
   if (onSelect) return <button type="button" className={`character-card selectable ${selected ? 'selected' : ''}`} onClick={() => onSelect(character)}>{content}</button>;
   return <Link className="character-card" to={`/characters/${encodeURIComponent(routeKey)}`}>{content}</Link>;
-}
+});

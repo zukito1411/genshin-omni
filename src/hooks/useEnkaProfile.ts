@@ -1,9 +1,11 @@
 import { useEffect, useState } from 'react';
 import { fetchEnkaByUid, fetchEnkaMetadata } from '../api/enka';
 import type { EnkaMetadata, EnkaProfile } from '../types/enka';
+import { playerErrorMessage } from '../utils/playerError';
 
 let metadataRequest: Promise<EnkaMetadata> | null = null;
 let storedMetadata: EnkaMetadata | null = null;
+const metadataListeners = new Set<(value: EnkaMetadata) => void>();
 
 export function useEnkaProfile(uid?: string) {
   const [profile, setProfile] = useState<EnkaProfile | null>(null);
@@ -25,7 +27,7 @@ export function useEnkaProfile(uid?: string) {
     fetchEnkaByUid(uid, controller.signal, attempt > 0)
       .then((value) => { if (active) setProfile(value); })
       .catch((reason: unknown) => {
-        if (active) setError(controller.signal.aborted ? 'Lookup took too long. Please try again.' : reason instanceof Error ? reason.message : 'Lookup failed.');
+        if (active) setError(controller.signal.aborted ? 'Lookup took too long. Please try again.' : playerErrorMessage(reason, 'This public profile could not be loaded. Check the UID and try again.'));
       })
       .finally(() => { window.clearTimeout(timer); if (active) setLoading(false); });
     return () => { active = false; window.clearTimeout(timer); controller.abort(); };
@@ -33,15 +35,21 @@ export function useEnkaProfile(uid?: string) {
 
   useEffect(() => {
     if (!uid) { setMetadataLoading(false); return; }
-    if (storedMetadata && attempt === 0) { setMetadata(storedMetadata); setMetadataLoading(false); return; }
+    if (storedMetadata && attempt === 0 && !metadataRequest) { setMetadata(storedMetadata); setMetadataLoading(false); return; }
     let active = true;
     setMetadataError(false);
     setMetadataLoading(true);
-    metadataRequest ??= fetchEnkaMetadata(undefined, attempt > 0).then((value) => { storedMetadata = value; return value; }).finally(() => { metadataRequest = null; });
+    const listener = (value: EnkaMetadata) => { if (active) setMetadata(value); };
+    metadataListeners.add(listener);
+    if (storedMetadata) setMetadata(storedMetadata);
+    metadataRequest ??= fetchEnkaMetadata(undefined, attempt > 0, (value) => {
+      storedMetadata = value;
+      metadataListeners.forEach((update) => update(value));
+    }).then((value) => { storedMetadata = value; return value; }).finally(() => { metadataRequest = null; });
     metadataRequest.then((value) => { if (active) setMetadata(value); })
       .catch(() => { if (active) setMetadataError(true); })
       .finally(() => { if (active) setMetadataLoading(false); });
-    return () => { active = false; };
+    return () => { active = false; metadataListeners.delete(listener); };
   }, [uid, attempt]);
 
   return { profile, loading, error, metadata, metadataError, metadataLoading, retry: () => setAttempt((value) => value + 1) };

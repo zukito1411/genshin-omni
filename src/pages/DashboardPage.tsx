@@ -1,5 +1,6 @@
 import {
   useEffect,
+  useMemo,
   useRef,
   useState,
 } from 'react';
@@ -16,6 +17,8 @@ import {
 } from 'lucide-react';
 import { SectionTitle } from '../components/SectionTitle';
 import { useCharacters } from '../hooks/useCharacters';
+import { usePageActive } from '../hooks/usePageActive';
+import { getJson } from '../api/http';
 
 interface GenshinNewsItem {
   id?: string;
@@ -102,6 +105,7 @@ function formatNewsDate(value?: string): string {
 
 export function DashboardPage() {
   const { allCharacters, loading } = useCharacters('');
+  const pageActive = usePageActive();
 
   const [news, setNews] = useState<GenshinNewsItem[]>([]);
   const [newsIndex, setNewsIndex] = useState(0);
@@ -113,23 +117,14 @@ export function DashboardPage() {
 
   useEffect(() => {
     let cancelled = false;
+    const controller = new AbortController();
 
     async function loadNews() {
       try {
         setNewsLoading(true);
         setNewsError(false);
 
-        const response = await fetch(NEWS_FEED_URL, {
-          headers: {
-            Accept: 'application/json',
-          },
-        });
-
-        if (!response.ok) {
-          throw new Error(`News request failed: ${response.status}`);
-        }
-
-        const data = (await response.json()) as GenshinNewsFeed;
+        const data = await getJson<GenshinNewsFeed>(NEWS_FEED_URL, controller.signal, { cacheKey: 'news:feed:v1', ttlMs: 10 * 60 * 1000 });
 
         if (cancelled) return;
 
@@ -159,18 +154,19 @@ export function DashboardPage() {
 
     return () => {
       cancelled = true;
+      controller.abort();
     };
   }, []);
 
   useEffect(() => {
-    if (news.length <= 1) return;
+    if (news.length <= 1 || !pageActive) return;
 
     const interval = window.setInterval(() => {
       setNewsIndex((current) => (current + 1) % news.length);
     }, NEWS_ROTATION_MS);
 
     return () => window.clearInterval(interval);
-  }, [news.length]);
+  }, [news.length, pageActive]);
 
   useEffect(() => {
     setNewsImageIndex(0);
@@ -178,9 +174,7 @@ export function DashboardPage() {
 
   const featuredNews = news[newsIndex] ?? news[0];
 
-  const newsImageCandidates = featuredNews
-    ? getNewsImageCandidates(featuredNews)
-    : [];
+  const newsImageCandidates = useMemo(() => featuredNews ? getNewsImageCandidates(featuredNews) : [], [featuredNews]);
 
   const currentNewsImage = newsImageCandidates[newsImageIndex];
 
@@ -195,37 +189,37 @@ export function DashboardPage() {
 
     if (!titleElement || !titleBox) return;
 
+    let frame = 0;
+    let lastBox = '';
     const fitTitle = () => {
+      frame = 0;
+      const box = `${titleBox.clientWidth}:${titleBox.clientHeight}`;
+      if (box === lastBox) return;
+      lastBox = box;
       const maxFontSize = 36;
       const minFontSize = 17;
-      const step = 1;
-
-      titleElement.style.fontSize = `${maxFontSize}px`;
-
-      let currentFontSize = maxFontSize;
-      let safety = 0;
-
-      while (
-        titleElement.scrollHeight > titleBox.clientHeight &&
-        currentFontSize > minFontSize &&
-        safety < 30
-      ) {
-        currentFontSize -= step;
-        titleElement.style.fontSize = `${currentFontSize}px`;
-        safety += 1;
+      let low = minFontSize;
+      let high = maxFontSize;
+      let best = minFontSize;
+      while (low <= high) {
+        const candidate = Math.floor((low + high) / 2);
+        titleElement.style.fontSize = `${candidate}px`;
+        if (titleElement.scrollHeight <= titleBox.clientHeight) { best = candidate; low = candidate + 1; }
+        else high = candidate - 1;
       }
+      titleElement.style.fontSize = `${best}px`;
     };
-
-    const frame = window.requestAnimationFrame(fitTitle);
-    const observer = new ResizeObserver(fitTitle);
+    const scheduleFit = () => { if (!frame) frame = window.requestAnimationFrame(fitTitle); };
+    scheduleFit();
+    const observer = new ResizeObserver(scheduleFit);
 
     observer.observe(titleBox);
-    window.addEventListener('resize', fitTitle);
+    window.addEventListener('resize', scheduleFit);
 
     return () => {
       window.cancelAnimationFrame(frame);
       observer.disconnect();
-      window.removeEventListener('resize', fitTitle);
+      window.removeEventListener('resize', scheduleFit);
     };
   }, [featuredNews?.title]);
 

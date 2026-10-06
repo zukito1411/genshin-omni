@@ -93,46 +93,38 @@ function ComparisonColumn({ entry, side }: { entry: ComparisonEntry; side: strin
   </section>;
 }
 
+function useComparison(selected?: GenshinCharacter) {
+  const [entry, setEntry] = useState<ComparisonEntry>(emptyEntry);
+  useEffect(() => {
+    if (!selected) { setEntry(emptyEntry); return; }
+    const controller = new AbortController();
+    const updateCharacter = (character: AggregatedCharacter) => {
+      if (!controller.signal.aborted) setEntry((current) => ({ ...current, character }));
+    };
+    const updateGuide = (guide: LivePlayerGuide) => {
+      if (!controller.signal.aborted) setEntry((current) => ({ ...current, guide }));
+    };
+    setEntry({ loading: true });
+    void Promise.allSettled([
+      fetchAggregatedCharacter(selected.name, controller.signal, updateCharacter).then(updateCharacter),
+      fetchPlayerGuide(selected.name, controller.signal, updateGuide).then(updateGuide),
+    ]).then(() => {
+      if (!controller.signal.aborted) setEntry((current) => ({ ...current, loading: false }));
+    });
+    return () => controller.abort();
+  }, [selected]);
+  return entry;
+}
+
 export function ComparePage() {
   const { allCharacters, loading: rosterLoading } = useCharacters('');
   const [leftId, setLeftId] = useState('');
   const [rightId, setRightId] = useState('');
-  const [left, setLeft] = useState<ComparisonEntry>(emptyEntry);
-  const [right, setRight] = useState<ComparisonEntry>(emptyEntry);
 
   const byId = useMemo(() => new Map(allCharacters.map((character) => [character.id, character])), [allCharacters]);
 
-  useEffect(() => {
-    let active = true;
-    const selected = byId.get(leftId);
-    if (!selected) { setLeft(emptyEntry); return () => { active = false; }; }
-    setLeft({ loading: true });
-    void Promise.all([
-      fetchAggregatedCharacter(selected.name),
-      fetchPlayerGuide(selected.name).catch(() => undefined),
-    ]).then(([character, guide]) => {
-      if (active) setLeft({ character, guide, loading: false });
-    }).catch(() => {
-      if (active) setLeft({ loading: false });
-    });
-    return () => { active = false; };
-  }, [leftId, byId]);
-
-  useEffect(() => {
-    let active = true;
-    const selected = byId.get(rightId);
-    if (!selected) { setRight(emptyEntry); return () => { active = false; }; }
-    setRight({ loading: true });
-    void Promise.all([
-      fetchAggregatedCharacter(selected.name),
-      fetchPlayerGuide(selected.name).catch(() => undefined),
-    ]).then(([character, guide]) => {
-      if (active) setRight({ character, guide, loading: false });
-    }).catch(() => {
-      if (active) setRight({ loading: false });
-    });
-    return () => { active = false; };
-  }, [rightId, byId]);
+  const left = useComparison(byId.get(leftId));
+  const right = useComparison(byId.get(rightId));
 
   const swap = () => {
     setLeftId(rightId);

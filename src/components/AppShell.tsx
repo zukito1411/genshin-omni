@@ -1,8 +1,9 @@
 import { Link, NavLink, Outlet, useLocation, useNavigate } from 'react-router-dom';
 import { ArrowLeftRight, BookOpen, Boxes, Compass, Eye, EyeOff, Home, ListChecks, Map, Search, Shield, Swords, UserRound, Users } from 'lucide-react';
-import { useEffect, useMemo, useRef, useState, type FormEvent, type KeyboardEvent } from 'react';
+import { Suspense, useEffect, useMemo, useRef, useState, type FormEvent, type KeyboardEvent } from 'react';
 import { useCharacters } from '../hooks/useCharacters';
 import { clearAppCache } from '../api/cache';
+import { clearResponseCache } from '../api/responseCache';
 import { usePaimonContext } from './PaimonCompanion';
 
 const nav = [
@@ -26,7 +27,7 @@ export function AppShell() {
   const navigate = useNavigate();
   const { pathname } = useLocation();
   const navRef = useRef<HTMLElement>(null);
-  const { allCharacters } = useCharacters('');
+  const { allCharacters } = useCharacters('', openSearch || Boolean(query));
   const { shown, setShown } = usePaimonContext();
 
   useEffect(() => {
@@ -128,10 +129,10 @@ export function AppShell() {
       <aside className="sidebar">
         <Link className="brand" to="/" aria-label="Teyvat Atlas home">
           <div className="brand-mark">
-            <img
+            <picture style={{ display: 'contents' }}><source srcSet="/assets/logo.webp" type="image/webp" /><img
               src="/assets/logo.png"
               alt="Teyvat Atlas logo"
-            />
+            /></picture>
           </div>
 
           <div>
@@ -162,8 +163,9 @@ export function AppShell() {
           <button
             className="text-button"
             type="button"
-            onClick={() => {
+            onClick={async () => {
               clearAppCache();
+              await clearResponseCache();
               window.location.reload();
             }}
           >
@@ -293,7 +295,9 @@ export function AppShell() {
             setOpenSearch(false)
           }
         >
-          <Outlet />
+          <Suspense fallback={<div className="detail-loading" role="status" aria-label="Loading page"><div className="skeleton-hero" /><div className="skeleton-line" /><div className="skeleton-line short" /></div>}>
+            <Outlet />
+          </Suspense>
         </div>
       </main>
     </div>

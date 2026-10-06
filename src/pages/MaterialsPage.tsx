@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { CalendarDays, Check, ListFilter } from 'lucide-react';
 import { SectionTitle } from '../components/SectionTitle';
 import { AsyncImage } from '../components/AsyncImage';
@@ -6,10 +6,11 @@ import { MaterialIcon } from '../components/MaterialIcon';
 import { assetKey, characterImageSources } from '../api/genshinDev';
 import { useCharacters } from '../hooks/useCharacters';
 import { fetchEntity } from '../api/genshinDb';
-import { fetchAggregatedCharacter } from '../api/aggregator';
+import { fetchCharacterMaterials } from '../api/characterMaterials';
+import { mapConcurrent } from '../utils/concurrency';
 import { extractMaterials } from '../utils/genshin';
 import { readMaterialChecks, writeMaterialChecks } from '../utils/playerData';
-import type { AggregatedCharacter, GenshinCharacter, LibraryEntity, MaterialRef } from '../types/genshin';
+import type { GenshinCharacter, LibraryEntity, MaterialRef } from '../types/genshin';
 
 const KEY = 'teyvat-atlas:material-selection';
 const WEEKDAYS = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
@@ -33,42 +34,15 @@ function extractAvailability(entity: LibraryEntity): string[] {
     .filter((value): value is string => Boolean(value)))];
 }
 
-async function loadAvailability(names: string[]): Promise<Record<string, { availability: string[]; entity?: LibraryEntity }>> {
-  const result: Record<string, { availability: string[]; entity?: LibraryEntity }> = {};
-  for (let offset = 0; offset < names.length; offset += 6) {
-    const batch = await Promise.all(names.slice(offset, offset + 6).map(async (name) => {
-      try {
-        const entity = await fetchEntity('materials', name);
-        return [name, { availability: extractAvailability(entity), entity }] as const;
-      } catch { return [name, { availability: [] }] as const; }
-    }));
-    Object.assign(result, Object.fromEntries(batch));
-  }
-  return result;
-}
-
-function hasValues(value: unknown): boolean {
-  return Array.isArray(value) ? value.length > 0 : Boolean(value && typeof value === 'object' && Object.keys(value).length > 0);
-}
-
-// The roster endpoint is intentionally small. Material costs live in the
-// enriched character records, where both public sources are combined.
-function materialPayload(character: AggregatedCharacter): Record<string, unknown> {
-  const raw = character.raw;
-  const dev = character.secondary.dev && typeof character.secondary.dev === 'object'
-    ? character.secondary.dev as Record<string, unknown>
-    : {};
-  const { costs: rawCosts, ascension_materials: rawAscension, ...rawDetails } = raw;
-  const { costs: devCosts, ascension_materials: devAscension, ...devDetails } = dev;
-  const costs = hasValues(rawCosts) ? rawCosts : devCosts;
-  const ascension = hasValues(rawAscension) ? rawAscension : devAscension;
-  // Both providers describe the same ascensions. Keep one source of costs,
-  // otherwise a successful fallback enrichment doubles the checklist totals.
-  return {
-    ...rawDetails,
-    ...devDetails,
-    ...(hasValues(costs) ? { costs } : { ascension_materials: ascension }),
-  };
+async function loadAvailability(names: string[], signal: AbortSignal, onItem: (name: string, data: { availability: string[]; entity?: LibraryEntity }) => void) {
+  await mapConcurrent(names, 3, async (name) => {
+    let data: { availability: string[]; entity?: LibraryEntity } = { availability: [] };
+    try {
+      const entity = await fetchEntity('materials', name, signal);
+      data = { availability: extractAvailability(entity), entity };
+    } catch { /* Farming-day metadata is optional. */ }
+    if (!signal.aborted) onItem(name, data);
+  }, signal);
 }
 
 export function MaterialsPage() {
@@ -77,6 +51,8 @@ export function MaterialsPage() {
   const [selectedIds, setSelectedIds] = useState(readIds);
   const [materials, setMaterials] = useState<PlanMaterial[]>([]);
   const [busy, setBusy] = useState(false);
+  const planRequest = useRef<AbortController | null>(null);
+  useEffect(() => () => planRequest.current?.abort(), []);
   const [built, setBuilt] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [filter, setFilter] = useState<Filter>('all');
@@ -88,6 +64,7 @@ export function MaterialsPage() {
 
   function toggleCharacter(id: string) {
     if (busy) return;
+    planRequest.current?.abort();
     const next = selectedIds.includes(id) ? selectedIds.filter((value) => value !== id) : [...selectedIds, id].slice(-8);
     setSelectedIds(next);
     try { localStorage.setItem(KEY, JSON.stringify(next)); } catch { /* Browser storage is optional. */ }
@@ -105,31 +82,37 @@ export function MaterialsPage() {
   }
 
   async function buildPlan() {
+    planRequest.current?.abort();
+    const controller = new AbortController();
+    planRequest.current = controller;
     setBusy(true);
     setBuilt(true);
     setError(null);
     try {
-      const loaded = await Promise.all(selectedCharacters.map((character) => fetchAggregatedCharacter(character.name).catch(() => null)));
+      const loaded = await mapConcurrent(selectedCharacters, 2, (character) => fetchCharacterMaterials(character.name, controller.signal).catch(() => null), controller.signal);
+      if (controller.signal.aborted) return;
       const total = new Map<string, MaterialRef>();
-      loaded.filter(Boolean).forEach((character) => extractMaterials(materialPayload(character as AggregatedCharacter)).forEach((item) => {
+      loaded.filter(Boolean).forEach((character) => extractMaterials(character as Record<string, unknown>).forEach((item) => {
         const current = total.get(item.name);
         total.set(item.name, { ...item, amount: (current?.amount ?? 0) + (item.amount ?? 0) || undefined });
       }));
       if (!total.size) {
         setMaterials([]);
-        setError('The live sources did not return material costs for this selection. Try a different character or refresh the data cache.');
+        setError('Material requirements are unavailable for this selection. Try a different character or choose Refresh latest data.');
         return;
       }
       const initial = [...total.values()].map((item) => ({ ...item, availability: [] })).sort((a, b) => a.name.localeCompare(b.name));
       // Show the checklist before optional farming-day metadata finishes loading.
       setMaterials(initial);
       setChecked(readMaterialChecks(planKey));
-      const availability = await loadAvailability([...total.keys()]);
-      setMaterials((current) => current.map((item) => ({ ...item, ...availability[item.name] })));
+      void loadAvailability([...total.keys()], controller.signal, (name, data) => {
+        setMaterials((current) => current.map((item) => item.name === name ? { ...item, ...data } : item));
+      }).catch(() => undefined);
     } catch (reason) {
+      if (controller.signal.aborted) return;
       setMaterials([]);
       setError(reason instanceof Error ? reason.message : 'Unable to build this material checklist.');
-    } finally { setBusy(false); }
+    } finally { if (!controller.signal.aborted) setBusy(false); }
   }
 
   const filteredMaterials = materials.filter((item) => {
@@ -142,7 +125,7 @@ export function MaterialsPage() {
   const completedCount = materials.filter((item) => checked.includes(item.name)).length;
 
   return <div>
-    <SectionTitle eyebrow="RESOURCE PLANNER" title="My Farming Plan" description="Choose up to eight characters, combine their live material requirements, and keep a local checklist. Farming days are shown only when the material provider exposes them." />
+    <SectionTitle eyebrow="RESOURCE PLANNER" title="My Farming Plan" description="Choose up to eight characters, combine their material requirements, and keep a checklist on this device. Farming days are shown when available." />
     <div className="planner-layout">
       <section className="panel"><div className="toolbar"><input className="search-input" value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Search characters" /></div>
         {selectedCharacters.length > 0 && <div className="selected-character-list">{selectedCharacters.map((character) => <button key={character.id} type="button" onClick={() => toggleCharacter(character.id)} disabled={busy}>{character.name} ×</button>)}</div>}

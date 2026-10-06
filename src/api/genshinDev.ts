@@ -18,6 +18,8 @@ const BUILD_ASSET_ALIASES: Record<string, string> = {
 };
 const assetMaps = new Map<string, Record<string, string>>();
 const assetMapRequests = new Map<string, Promise<Record<string, string>>>();
+const characterSources = new WeakMap<object, Map<string, string[]>>();
+const entitySources = new WeakMap<object, Map<string, string[]>>();
 
 function unique(values: Array<string | undefined>): string[] {
   return [...new Set(values.filter((value): value is string => Boolean(value && value.trim())))];
@@ -175,6 +177,8 @@ function filenameFrom(value?: string): string | undefined {
 }
 
 export function characterImageSources(character: Pick<GenshinCharacter, 'id' | 'name' | 'images'>, kind: 'card' | 'portrait' | 'icon' = 'card'): string[] {
+  const cached = characterSources.get(character)?.get(kind);
+  if (cached) return cached;
   const { images } = character;
   const files = images.files ?? {};
   const filenames = kind === 'icon'
@@ -192,7 +196,7 @@ export function characterImageSources(character: Pick<GenshinCharacter, 'id' | '
   const genshinTypes = kind === 'portrait' ? ['portrait', 'icon', 'card'] : ['icon', 'card', 'portrait'];
   const isTraveler = /^(?:aether|lumine|traveler)$/i.test(character.name || character.id);
 
-  return unique([
+  const result = unique([
     ...(isTraveler ? [TRAVELER_BUILD_IMAGE, TRAVELER_COMBINED_IMAGE] : []),
     ...filenames.flatMap((filename) => cdnCandidates(filename, 'characters')),
     ...raw.flatMap(directImage),
@@ -201,6 +205,10 @@ export function characterImageSources(character: Pick<GenshinCharacter, 'id' | '
     ...filenames.flatMap((filename) => cdnCandidates(filename, 'characters')),
     ...characterIconCdnSources(character.name || character.id),
   ]);
+  const variants = characterSources.get(character) ?? new Map();
+  variants.set(kind, result);
+  characterSources.set(character, variants);
+  return result;
 }
 
 export function characterImages(nameOrId: string) {
@@ -214,6 +222,9 @@ export function characterImages(nameOrId: string) {
 }
 
 export function entityImageSources(type: string, entity: Pick<LibraryEntity, 'name' | 'icon' | 'raw'>, kind: 'icon' = 'icon'): string[] {
+  const key = `${type}:${kind}`;
+  const cached = entitySources.get(entity)?.get(key);
+  if (cached) return cached;
   const raw = asRecord(entity.raw);
   const rawValues = [
     entity.icon,
@@ -230,7 +241,7 @@ export function entityImageSources(type: string, entity: Pick<LibraryEntity, 'na
     ? ['flower-of-life', 'plume-of-death', 'sands-of-eon', 'goblet-of-eonothem', 'circlet-of-logos'].map((imageType) => entityImage(type, entity.name, imageType))
     : type === 'weapons' ? [entityImage(type, entity.name, kind)] : [];
 
-  return unique([
+  const result = unique([
     ...filenameCandidates.flatMap((filename) => cdnCandidates(filename, type as 'characters' | 'weapons' | 'artifacts' | 'materials')),
     ...directImage(entity.icon),
     ...rawImages,
@@ -239,6 +250,10 @@ export function entityImageSources(type: string, entity: Pick<LibraryEntity, 'na
     ...filenameCandidates.flatMap((filename) => cdnCandidates(filename, type as 'characters' | 'weapons' | 'artifacts' | 'materials')),
     ...entityIconCdnSources(type, entity.name),
   ]);
+  const variants = entitySources.get(entity) ?? new Map();
+  variants.set(key, result);
+  entitySources.set(entity, variants);
+  return result;
 }
 
 export function materialImageSources(name: string, entity?: LibraryEntity, icon?: string): string[] {

@@ -1,4 +1,4 @@
-import { readCache, writeCache } from './cache';
+import { readResponseCache, writeResponseCache } from './responseCache';
 
 const inFlight = new Map<string, Promise<unknown>>();
 const RETRY_DELAYS_MS = [250, 750];
@@ -54,7 +54,8 @@ export async function getJson<T>(url: string, signal?: AbortSignal, options?: Re
   const cacheKey = options?.cacheKey ?? url;
   const ttlMs = options?.ttlMs ?? 30 * 60 * 1000;
   const shareRequest = !signal;
-  const cached = readCache<T>(cacheKey);
+  const cached = await readResponseCache<T>(cacheKey);
+  if (signal?.aborted) throw new DOMException('Request aborted', 'AbortError');
   if (cached && !cached.stale && !options?.forceRefresh) return cached.value;
 
   // A caller-owned signal must never cancel a request another screen is
@@ -66,6 +67,7 @@ export async function getJson<T>(url: string, signal?: AbortSignal, options?: Re
     const deadline = requestDeadline(signal, options?.timeoutMs);
     try {
       let value: T | undefined;
+      let bodyLength = 0;
       let parseError: unknown;
       // A few public endpoints occasionally answer 200 with a truncated body.
       // JSON parsing is therefore part of a successful request, not a final
@@ -75,6 +77,7 @@ export async function getJson<T>(url: string, signal?: AbortSignal, options?: Re
           const response = await fetchWithRetry(url, deadline.signal, 'application/json');
           if (!response.ok) throw new Error(`Request failed (${response.status})`);
           const body = (await response.text()).trim();
+          bodyLength = body.length;
           if (!body) throw new SyntaxError('Provider returned an empty JSON response.');
           value = JSON.parse(body) as T;
           break;
@@ -85,7 +88,7 @@ export async function getJson<T>(url: string, signal?: AbortSignal, options?: Re
         }
       }
       if (value === undefined) throw parseError instanceof Error ? parseError : new Error('Provider returned invalid JSON.');
-      writeCache(cacheKey, value, ttlMs);
+      writeResponseCache(cacheKey, value, ttlMs, bodyLength);
       return value;
     } catch (error) {
       if (signal?.aborted) throw error;
@@ -105,7 +108,8 @@ export async function getText(url: string, signal?: AbortSignal, options?: Reque
   const cacheKey = options?.cacheKey ?? url;
   const ttlMs = options?.ttlMs ?? 30 * 60 * 1000;
   const shareRequest = !signal;
-  const cached = readCache<string>(cacheKey);
+  const cached = await readResponseCache<string>(cacheKey);
+  if (signal?.aborted) throw new DOMException('Request aborted', 'AbortError');
   if (cached && !cached.stale && !options?.forceRefresh) return cached.value;
 
   const pending = shareRequest ? inFlight.get(cacheKey) : undefined;
@@ -117,7 +121,7 @@ export async function getText(url: string, signal?: AbortSignal, options?: Reque
       const response = await fetchWithRetry(url, deadline.signal, 'text/plain');
       if (!response.ok) throw new Error(`Request failed (${response.status})`);
       const value = await response.text();
-      writeCache(cacheKey, value, ttlMs);
+      writeResponseCache(cacheKey, value, ttlMs, value.length);
       return value;
     } catch (error) {
       if (signal?.aborted) throw error;

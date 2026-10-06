@@ -16,6 +16,7 @@ import { useCharacters } from '../hooks/useCharacters';
 import { slugify } from '../utils/normalize';
 import { combinedKitLists } from '../utils/characterKit';
 import { gameText } from '../utils/gameText';
+import { playerErrorMessage } from '../utils/playerError';
 import { baseStatRows, extractConstellations, extractMaterials, extractTalents, formatValue } from '../utils/genshin';
 import type { AggregatedCharacter, CharacterGuide, LibraryEntity, MaterialRef } from '../types/genshin';
 
@@ -227,7 +228,7 @@ export function CharacterPage() {
         setCharacter((current) => current ?? { ...characterValue, stats: {}, secondary: {}, sources: [] });
       })
       .catch((err) => {
-        if (active && !hasCharacter && err?.name !== 'AbortError') setError(err instanceof Error ? err.message : 'Unable to load this character.');
+        if (active && !hasCharacter && err?.name !== 'AbortError') setError(playerErrorMessage(err, 'This character could not be loaded. Please try again.'));
       })
       .finally(() => {
         if (active) setLoading(false);
@@ -235,7 +236,12 @@ export function CharacterPage() {
 
     const hydrateGameData = async () => {
       try {
-        const enriched = await fetchAggregatedCharacter(activeCharacterQuery);
+        const enriched = await fetchAggregatedCharacter(activeCharacterQuery, controller.signal, (partial) => {
+          if (!active) return;
+          hasCharacter = true;
+          setError(null);
+          setCharacter(partial);
+        });
         if (!active) return;
         hasCharacter = true;
         setError(null);
@@ -282,10 +288,11 @@ export function CharacterPage() {
     return () => controller.abort();
   }, [recommendationQueries]);
 
+  const materialNames = character ? [...new Set(extractMaterials(characterDetailRaw(character)).map((material) => material.name))].slice(0, 50).join('|') : '';
   useEffect(() => {
     if (!character) return;
     const controller = new AbortController();
-    const names = [...new Set(extractMaterials(characterDetailRaw(character)).map((material) => material.name))].slice(0, 50);
+    const names = materialNames ? materialNames.split('|') : [];
     const load = async () => {
       // Material records are independent, but querying in small batches avoids
       // a burst of requests whenever a player opens a character page. Commit
@@ -302,7 +309,7 @@ export function CharacterPage() {
     };
     void load();
     return () => controller.abort();
-  }, [character]);
+  }, [materialNames]);
 
   useEffect(() => {
     if (!selectedRecommendation) return;

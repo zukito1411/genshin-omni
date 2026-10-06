@@ -1,11 +1,13 @@
-import { useEffect, useMemo, useState } from 'react';
-import { ExternalLink, X } from 'lucide-react';
+import { useCallback, useDeferredValue, useEffect, useMemo, useState } from 'react';
+import { X } from 'lucide-react';
+import { playerErrorMessage } from '../utils/playerError';
 import { fetchEntity, fetchFolderEntities, fetchStats } from '../api/genshinDb';
 import { assetKey, entityImageSources } from '../api/genshinDev';
 import { SectionTitle } from '../components/SectionTitle';
 import { AsyncImage } from '../components/AsyncImage';
 import { MaterialIcon } from '../components/MaterialIcon';
 import { ArtifactPieces } from '../components/ArtifactPieces';
+import { LibraryCard } from '../components/LibraryCard';
 import { usePaimonContext } from '../components/PaimonCompanion';
 import { extractMaterials, formatValue } from '../utils/genshin';
 import { gameText } from '../utils/gameText';
@@ -156,6 +158,7 @@ export function LibraryPage({
 }) {
   const [items, setItems] = useState<LibraryEntity[]>([]);
   const [search, setSearch] = useState('');
+  const deferredSearch = useDeferredValue(search);
   const { setContext: setPaimonContext } = usePaimonContext();
   const [rarity, setRarity] = useState('All');
   const [selected, setSelected] = useState<LibraryEntity | null>(null);
@@ -218,9 +221,7 @@ export function LibraryPage({
       .catch((reason) => {
         if (!controller.signal.aborted && reason?.name !== 'AbortError') {
           setError(
-            reason instanceof Error
-              ? reason.message
-              : `Unable to load ${folder}.`,
+            playerErrorMessage(reason, 'This library is temporarily unavailable. Please try again.'),
           );
         }
       })
@@ -233,16 +234,16 @@ export function LibraryPage({
     () =>
       items.filter(
         (item) =>
-          (!search ||
+          (!deferredSearch ||
             `${item.name} ${item.type ?? ''} ${item.description ?? ''}`
               .toLowerCase()
-              .includes(search.toLowerCase())) &&
+              .includes(deferredSearch.toLowerCase())) &&
           (rarity === 'All' || String(item.rarity) === rarity),
       ),
-    [items, search, rarity],
+    [items, deferredSearch, rarity],
   );
 
-  async function open(item: LibraryEntity) {
+  const open = useCallback(async (item: LibraryEntity) => {
     setSelected(item);
 
     if (folder === 'weapons') {
@@ -301,7 +302,7 @@ export function LibraryPage({
     } catch {
       // Keep the index data when the detailed request is unavailable.
     }
-  }
+  }, [folder, weaponProgressions]);
 
   const selectedWeapon =
     folder === 'weapons' && selected
@@ -445,7 +446,7 @@ export function LibraryPage({
           <p>{error}</p>
 
           <p>
-            Use Refresh latest data in the sidebar after a provider outage.
+            Check your connection, then choose Refresh latest data in the sidebar.
           </p>
         </div>
       )}
@@ -461,31 +462,7 @@ export function LibraryPage({
         </div>
       ) : (
         <div className="entity-grid">
-          {filtered.map((item) => (
-            <button
-              className={`entity-card rarity-${item.rarity ?? 0}`}
-              key={item.id || item.name}
-              onClick={() => open(item)}
-            >
-              <AsyncImage
-                className="entity-icon"
-                src={entityImageSources(folder, item)}
-                alt={item.name}
-                assetKey={assetKey(folder, item.name)}
-              />
-
-              <div>
-                <strong>{item.name}</strong>
-
-                <span>
-                  {item.type ?? '—'}{' '}
-                  {item.rarity
-                    ? `· ${'★'.repeat(item.rarity)}`
-                    : ''}
-                </span>
-              </div>
-            </button>
-          ))}
+          {filtered.map((item) => <LibraryCard key={item.id || item.name} item={item} folder={folder} onOpen={open} />)}
         </div>
       )}
 
@@ -729,15 +706,6 @@ export function LibraryPage({
               </>
             )}
 
-            <a
-              className="source-button"
-              href="https://genshin-db-api.vercel.app/"
-              target="_blank"
-              rel="noreferrer"
-            >
-              View data source
-              <ExternalLink size={13} />
-            </a>
           </aside>
         </div>
       )}
