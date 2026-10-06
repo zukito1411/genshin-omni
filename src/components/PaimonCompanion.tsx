@@ -52,6 +52,7 @@ function getPageFromPath(pathname: string): PaimonPage {
   if (pathname === '/materials') return 'materials';
   if (pathname === '/compare') return 'compare';
   if (pathname === '/account') return 'account';
+  if (pathname === '/me' || pathname.startsWith('/me/')) return 'account';
   if (pathname.startsWith('/profile')) return 'profile';
   if (pathname === '/map') return 'map';
   if (pathname === '/guides') return 'guides';

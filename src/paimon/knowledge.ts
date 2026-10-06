@@ -38,6 +38,7 @@ export function getPaimonHelpReply(question: string, page: PaimonPage, name?: st
   if (/\b(?:compare|comparison|versus|vs|better)\b/.test(query)) {
     return { text: 'The comparison tool puts progression and sourced build guidance side by side.', route: '/compare', actionLabel: 'Compare Characters' };
   }
+  if (/\b(?:my profile|hoyolab|my resin|my commissions)\b/.test(query)) return { text: 'My Profile shows your connected HoYoLAB account and available daily notes. Only connect your own account, and never put session tokens or passwords in chat.', route: '/me', actionLabel: 'Open My Profile' };
   if (/\b(?:uid|showcase|profiles?)\b/.test(query)) {
     return { text: 'Search a UID, then choose a public showcase character to see their equipped stats, weapons, and artifacts.', route: '/profile', actionLabel: 'Open UID Search' };
   }

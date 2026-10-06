@@ -68,7 +68,7 @@ test('memory validation caps retention, deduplicates keys and searches labels wi
 });
 
 test('credential detection excludes sensitive notes and conversations', () => {
-  for (const value of ['my password is test-secret', 'API key: test-secret', 'Bearer test-token', 'xai-'+'z'.repeat(30), '-----BEGIN RSA PRIVATE KEY-----']) expect(containsCredential(value)).toBe(true);
+  for (const value of ['my password is test-secret', 'API key: test-secret', 'ltoken_v2=fixture-secret', 'hoyolab session token: fixture-secret', 'Bearer test-token', 'xai-'+'z'.repeat(30), '-----BEGIN RSA PRIVATE KEY-----']) expect(containsCredential(value)).toBe(true);
   expect(containsCredential('my favorite character is Skirk')).toBe(false);
   const notebook = normalizeNotebook({ facts: [{ key: 'password', label: 'password', value: 'password is test-secret', updatedAt: 1 }], turns: [{ id: '1', question: 'API key: test-secret', answer: 'No.', at: 1 }] });
   expect(notebook.facts).toEqual([]);

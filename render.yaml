@@ -6,6 +6,19 @@ services:
     autoDeploy: true
     buildCommand: npm install && npm run build
     staticPublishPath: ./dist
+    headers:
+      - path: /*
+        name: X-Content-Type-Options
+        value: nosniff
+      - path: /*
+        name: X-Frame-Options
+        value: DENY
+      - path: /*
+        name: Referrer-Policy
+        value: strict-origin-when-cross-origin
+      - path: /*
+        name: Content-Security-Policy
+        value: "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' https: data: blob:; connect-src 'self' https:; font-src 'self'; frame-src https://act.hoyolab.com; object-src 'none'; base-uri 'none'; form-action 'self'; frame-ancestors 'none'"
     routes:
       - type: rewrite
         source: /*

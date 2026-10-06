@@ -70,6 +70,90 @@ built-in browser guide instead.
 
 Render is configured as a static site, so it does not host this function.
 
+## Connected My Profile on Netlify
+
+`My Profile` is the second navigation item. `/me` is separate from public UID
+Search and device-local My Roster. It supports opt-in global HoYoLAB session
+connection, owned-character builds, achievement/active-day totals, Abyss/Theater
+summaries when supplied, exploration, and Real-Time Notes (resin, commissions,
+realm currency, expeditions). Character details load only when opened; a bounded,
+per-session server-memory cache shares recent reads for 30 seconds. Missing
+information is marked unavailable, never fabricated.
+
+This is **not official HoYoLAB OAuth**. The verified integration uses an existing
+HoYoLAB session: matching `ltuid_v2` / `ltoken_v2`, or legacy `ltuid` / `ltoken`.
+The advanced connection help explains this. The site never asks for a game
+password, automatically enables privacy settings, claims rewards, or bypasses
+HoYoLAB verification. Session tokens remain sensitive even though this backend
+exposes only account-reading operations. Connecting on mobile may require first
+obtaining a session on desktop; there is no fabricated one-click mobile login.
+
+The backend is in the same repository, deployed as Netlify Functions. Netlify
+Blobs supplies private persistence; no separate Render server/database is needed.
+Render **Static Sites** and plain `vite dev`/`vite preview` cannot host these
+functions: My Profile shows an unavailable state and never requests credentials
+when the backend is absent or disabled. Public player tools remain usable.
+
+Before enabling this publicly, set these **server-only production Function
+environment variables** in Netlify and redeploy:
+
+```text
+HOYOLAB_ENABLED = true
+HOYOLAB_APP_ORIGIN = https://your-exact-production-domain.example
+HOYOLAB_ENCRYPTION_KEY = <64 hexadecimal characters from 32 random bytes>
+```
+
+Generate the encryption key locally, then paste it into Netlify's protected
+environment settings (never Git, a `VITE_` variable, chat, or frontend source):
+
+```bash
+node -e "console.log(require('node:crypto').randomBytes(32).toString('hex'))"
+```
+
+Use the exact HTTPS origin, with no path/query. The current SDK requires Node
+22.12+; Netlify is configured for Node 22. Blobs is automatically available in
+Netlify Functions; no personal Netlify access token belongs in the frontend.
+Production-only checks disable linking on Deploy Previews/branch deploys.
+Changing the encryption key invalidates previous connections. Disabling
+`HOYOLAB_ENABLED` stops account access immediately. Netlify usage quotas apply.
+
+Security boundaries:
+
+- HoYoLAB credentials and connection records are AES-256-GCM encrypted, bound
+  to the exact origin and an unguessable session key. Storage reads use strong
+  consistency so disconnects take effect immediately.
+- The browser receives only a random `__Host-` cookie (`HttpOnly`, `Secure`,
+  `SameSite=Strict`) and a CSRF token held in memory. Connections expire after
+  24 hours. Disconnect deletes the server record and clears this cookie.
+- Account ownership comes from HoYoLAB's authenticated game-role list, not
+  user-submitted UID claims. Private character requests are checked against
+  that connected account's owned roster.
+- Private responses forbid browser/CDN caching; they bypass the public HTTP
+  and local-storage caches and are never automatically sent to AI Paimon.
+- Writes require the exact origin, the application header, and (after linking)
+  the connection's CSRF token. Body sizes, credentials, image hosts, and provider
+  destinations are bounded/allowlisted. Redirects and arbitrary proxy URLs are
+  rejected. Raw provider errors/credentials are not logged or exposed.
+- Netlify platform rate limiting plus a bounded warm-instance throttle protect
+  this endpoint. CSP restricts scripts to the site's own assets; inline styles
+  remain allowed for the existing animated UI. Frame blocking and MIME-sniffing
+  protection are configured for both Netlify and Render.
+- The hourly scheduled cleanup removes expired encrypted records on a
+  best-effort bounded pass. Expired sessions are denied immediately regardless
+  of cleanup; retention is not an exact deletion-time guarantee at large scale.
+  Cleanup continues when linking is disabled or the encryption key is rotated.
+
+Provider routes/field definitions are cross-checked against the maintained
+[genshin.py implementation](https://github.com/seriaati/genshin.py). This is an
+unofficial HoYoLAB integration; upstream changes, session expiry, and verification
+challenges can prevent live access. Tests use fake credentials and mocked provider
+responses, not a real HoYoLAB login. Configure and verify on a restricted production
+deployment before accepting public connections. Security testing reduces risk;
+it is not an independent audit or a guarantee against breaches.
+
+Resin is a timestamped HoYoLAB reading, not an invented live counter. This profile
+implementation does not yet include background resin alarms/Web Push delivery.
+
 ## Local Paimon notebook and tools
 
 The fallback is a lightweight, on-demand browser assistant, not a self-training

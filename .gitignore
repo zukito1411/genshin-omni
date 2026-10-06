@@ -1,6 +1,9 @@
 node_modules
 dist
 .env
+.env.*
+!.env.example
+.netlify/
 .DS_Store
 *.log
 test-results/

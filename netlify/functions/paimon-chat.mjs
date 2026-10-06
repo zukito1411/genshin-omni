@@ -1,3 +1,4 @@
+import { containsSensitiveCredential } from '../lib/credential-guard.mjs';
 const MAX_QUESTION_LENGTH = 600;
 const MAX_NAME_LENGTH = 100;
 const MAX_REPLY_LENGTH = 1_200;
@@ -126,6 +127,7 @@ export default async (request) => {
   if (!question) {
     return json({ error: 'Please ask Paimon a question.' }, 400);
   }
+  if (containsSensitiveCredential(question)) return json({ error: 'Please keep passwords and session credentials out of chat.' }, 400);
 
   let upstream;
   try {

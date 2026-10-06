@@ -14,6 +14,7 @@ const MaterialsPage = lazy(() => import('./pages/MaterialsPage').then((module) =
 const AccountPage = lazy(() => import('./pages/AccountPage').then((module) => ({ default: module.AccountPage })));
 const ComparePage = lazy(() => import('./pages/ComparePage').then((module) => ({ default: module.ComparePage })));
 const ProfilePage = lazy(() => import('./pages/ProfilePage').then((module) => ({ default: module.ProfilePage })));
+const MyProfilePage = lazy(() => import('./pages/MyProfilePage').then((module) => ({ default: module.MyProfilePage })));
 const ShowcaseCharacterPage = lazy(() => import('./pages/ShowcaseCharacterPage').then((module) => ({ default: module.ShowcaseCharacterPage })));
 
 export default function App() {
@@ -25,6 +26,9 @@ export default function App() {
         <Routes>
           <Route element={<AppShell />}>
             <Route path="/" element={<DashboardPage />} />
+            <Route path="/me" element={<MyProfilePage />} />
+            <Route path="/me/:uid" element={<MyProfilePage />} />
+            <Route path="/me/:uid/characters/:characterId" element={<MyProfilePage />} />
             <Route path="/characters" element={<CharactersPage />} />
             <Route path="/characters/:id" element={<CharacterPage />} />
             <Route

@@ -8,6 +8,7 @@ import { usePaimonContext } from './PaimonCompanion';
 
 const nav = [
   { to: '/', label: 'Home', icon: Home },
+  { to: '/me', label: 'My Profile', icon: UserRound },
   { to: '/characters', label: 'Characters', icon: Users },
   { to: '/weapons', label: 'Weapons', icon: Swords },
   { to: '/artifacts', label: 'Artifacts', icon: Boxes },
