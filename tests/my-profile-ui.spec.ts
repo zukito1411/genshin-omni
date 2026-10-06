@@ -36,6 +36,7 @@ async function mock(page: Page, options: { available?: boolean; connected?: bool
     if (method === 'DELETE') { connected = false; return route.fulfill({ json: { available: true, connected: false } }); }
     if (body.action === 'connect') { connected = true; return route.fulfill({ json: { available: true, connected: true, roles: [role], csrf: 'c'.repeat(43) } }); }
     if (body.action === 'artwork') return route.fulfill({ json: { artwork: { uid: body.uid, avatar: 'UI_AvatarIcon_Ayaka_Circle.png', namecard: 'UI_NameCardPic_Ambor_P.jpg' } } });
+    if (body.action === 'push-status') return route.fulfill({ json: { alarm: null } });
     if (options.profileFailure) return route.fulfill({ status: 503, json: { code: 'unavailable', debug: 'do-not-display-internal-log' } });
     if (body.action === 'profile') return route.fulfill({ json: { profile: options.noNotes ? { ...profile, notes: null, unavailable: ['notes'] } : profile } });
     return route.fulfill({ json: { character: build } });

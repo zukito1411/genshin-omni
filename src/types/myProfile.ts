@@ -15,6 +15,6 @@ export interface PrivateProfile {
   role: ConnectedRole; updatedAt: number; unavailable: string[];
   stats: { achievements: number | null; daysActive: number | null; characters: number | null; abyss: string | null; theaterAct: number | null; stygian: string | null; waypoints: number | null; domains: number | null; chests: Array<{ label: string; value: number | null }> };
   notes: null | { resin: number | null; maxResin: number | null; recoverySeconds: number | null; commissions: number | null; maxCommissions: number | null; commissionRewardClaimed: boolean | null; realmCurrency: number | null; maxRealmCurrency: number | null; expeditions: Array<{ icon: string; status: string; remainingSeconds: number | null }> };
-  exploration: Array<{ name: string; icon: string; percentage: number | null; level: number | null }>;
+  exploration: Array<{ name: string; icon: string; icons?: string[]; percentage: number | null; level: number | null }>;
   characters: PrivateCharacter[];
 }

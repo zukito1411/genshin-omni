@@ -6,7 +6,11 @@ const name = (value, fallback) => { const clean = text(value); return clean && !
 export function imageUrl(value) {
   try {
     const url = new URL(value);
-    if (url.protocol !== 'https:' || url.username || url.password || url.search || !['hoyolab.com', 'hoyoverse.com', 'mihoyo.com'].some((host) => url.hostname === host || url.hostname.endsWith(`.${host}`))) return '';
+    if (url.protocol !== 'https:' || url.username || url.password || (url.port && url.port !== '443') || url.hash || !['hoyolab.com', 'hoyoverse.com', 'mihoyo.com'].some((host) => url.hostname === host || url.hostname.endsWith(`.${host}`))) return '';
+    // HoYo's upload CDN adds image-processing parameters to otherwise public
+    // artwork. Drop only that known transform, never accept signed/private URLs.
+    if ([...url.searchParams.keys()].some((key) => key !== 'x-oss-process')) return '';
+    url.search = '';
     return url.href;
   } catch { return ''; }
 }
@@ -15,7 +19,7 @@ export function normalizeRoles(data) {
     .map((role) => ({ uid: String(role.game_uid), region: role.region, server: text(role.region_name) || role.region, nickname: text(role.nickname) || 'Traveler', level: number(role.level, 100) }));
 }
 export function normalizeCharacter(value) {
-  return { id: number(value?.id ?? value?.avatar_id), name: name(value?.name, 'Name unavailable'), icon: imageUrl(value?.icon), element: text(value?.element, 20), rarity: number(value?.rarity, 10), level: number(value?.level, 100), friendship: number(value?.fetter, 10), constellation: number(value?.actived_constellation_num, 6) };
+  return { id: number(value?.id ?? value?.avatar_id), name: name(value?.name, 'Name unavailable'), icon: imageUrl(value?.icon), element: text(value?.element, 20), rarity: value?.rarity === 105 ? 5 : number(value?.rarity, 5), level: number(value?.level, 100), friendship: number(value?.fetter, 10), constellation: number(value?.actived_constellation_num, 6) };
 }
 export function normalizeProfile(role, index, notes, characters, updatedAt, unavailable) {
   const stats = index?.stats;
@@ -37,25 +41,32 @@ export function normalizeProfile(role, index, notes, characters, updatedAt, unav
       realmCurrency: number(n.current_home_coin), maxRealmCurrency: number(n.max_home_coin),
       expeditions: list(n.expeditions, 8).map((entry) => ({ icon: imageUrl(entry?.avatar_side_icon), status: entry?.status === 'Finished' ? 'Finished' : 'Ongoing', remainingSeconds: /^\d{1,8}$/.test(String(entry?.remained_time)) ? Number(entry.remained_time) : null })),
     } : null,
-    exploration: list(index?.world_explorations, 40).map((area) => ({ name: text(area?.name) || 'Area name unavailable', icon: imageUrl(area?.icon), percentage: number(area?.exploration_percentage, 1000) === null ? null : area.exploration_percentage / 10, level: number(area?.level, 100) })),
+    exploration: list(index?.world_explorations, 40).map((area) => {
+      const icons = [...new Set([area?.icon, area?.inner_icon, area?.cover, area?.background_image].map(imageUrl).filter(Boolean))];
+      return { name: text(area?.name) || 'Area name unavailable', icon: icons[0] ?? '', icons, percentage: number(area?.exploration_percentage, 10000) === null ? null : area.exploration_percentage / 10, level: number(area?.level, 100) };
+    }),
     characters: list(characters?.list).filter((entry) => number(entry?.id ?? entry?.avatar_id) !== null).map(normalizeCharacter),
   };
 }
 export function normalizeBuild(data, characterId) {
-  const character = list(data?.list, 10).find((entry) => String(entry?.id ?? entry?.avatar_id) === String(characterId));
-  if (!character) return null;
+  const detail = list(data?.list, 10).find((entry) => String(entry?.base?.id ?? entry?.base?.avatar_id ?? entry?.id ?? entry?.avatar_id) === String(characterId));
+  if (!detail) return null;
+  // Actual character/detail responses put identity and progression in `base`.
+  // Keep the detailed weapon at the top level, not the incomplete base.weapon.
+  const character = { ...detail, ...(detail.base ?? {}), weapon: detail.weapon, image: detail.image };
   const map = data?.property_map ?? {};
   const property = (entry) => {
-    const info = entry?.info ?? map[String(entry?.property_type)];
+    const info = map[String(entry?.property_type)] ?? entry?.info;
     const label = text(info?.name);
-    const value = text(entry?.final ?? entry?.value, 80);
+    const raw = entry?.final ?? entry?.value;
+    const value = text(typeof raw === 'number' && Number.isFinite(raw) ? String(raw) : raw, 80);
     return label && value ? { label, value } : null;
   };
   const properties = (entries) => list(entries, 40).map(property).filter(Boolean);
   const weapon = character.weapon;
   return {
     ...normalizeCharacter(character), image: imageUrl(character.image),
-    stats: properties([...list(character.base_properties), ...list(character.extra_properties), ...list(character.element_properties)]),
+    stats: properties([...list(character.base_properties), ...list(character.extra_properties), ...list(character.element_properties), ...list(character.selected_properties)]).filter((entry, index, entries) => entries.findIndex((other) => other.label === entry.label) === index),
     weapon: weapon ? { name: name(weapon.name, 'Weapon name unavailable'), icon: imageUrl(weapon.icon), level: number(weapon.level, 100), refinement: number(weapon.affix_level, 5), rarity: number(weapon.rarity, 5), stats: properties([weapon.main_property, weapon.sub_property]) } : null,
     artifacts: list(character.relics, 5).map((item) => ({ name: name(item?.name, 'Artifact name unavailable'), icon: imageUrl(item?.icon), slot: text(item?.pos_name), level: number(item?.level, 20), set: name(item?.set?.name, ''), stats: properties([item?.main_property, ...list(item?.sub_property_list, 4)]) })),
     skills: list(character.skills, 12).map((skill) => ({ name: text(skill?.name) || 'Talent name unavailable', icon: imageUrl(skill?.icon), level: number(skill?.level, 20), description: text(skill?.desc, 2000) })),

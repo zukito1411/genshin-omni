@@ -2,10 +2,12 @@ import { memo, useDeferredValue, useEffect, useMemo, useRef, useState, type Form
 import { Link, useNavigate, useParams } from 'react-router-dom';
 import { ArrowLeft, ArrowRight, Clock, Droplets, ExternalLink, LogOut, RefreshCw, ShieldCheck, Trophy } from 'lucide-react';
 import { SectionTitle } from '../components/SectionTitle';
-import { AsyncImage } from '../components/AsyncImage';
+import { ProfileImage as AsyncImage } from '../components/ProfileImage';
 import { AssetPlaceholder } from '../components/AssetPlaceholder';
 import { HoYoLabLoginForm } from '../components/HoYoLabLoginForm';
 import { ConnectedProfileBanner } from '../components/ConnectedProfileBanner';
+import { ResinAlarm } from '../components/ResinAlarm';
+import { localResinAlarms } from '../utils/localResinAlarms';
 import { usePaimonContext } from '../components/PaimonCompanion';
 import { useCharacters } from '../hooks/useCharacters';
 import { characterImageSources } from '../api/genshinDev';
@@ -103,8 +105,10 @@ export function MyProfilePage() {
     return { ...entry, name: entry.name === 'Name unavailable' ? match?.name ?? entry.name : entry.name, element: entry.element || match?.element || '', icon: entry.icon || (match ? characterImageSources(match, 'icon')[0] : '') };
   }) ?? [], [profile, catalog]);
   const operation = useRef<AbortController | null>(null);
+  const alarmSetup = useRef(false);
   const channel = useRef<BroadcastChannel | null>(null);
   const role = session?.roles?.find((entry) => entry.uid === uid) ?? (!uid ? session?.roles?.[0] : undefined);
+  useEffect(() => { if (session && !session.connected) localResinAlarms.clear(); }, [session?.connected]);
   useEffect(() => { setContext({ page: 'account' }); }, [setContext]); // Never share private account names with AI Paimon.
   useEffect(() => {
     const controller = new AbortController();
@@ -140,7 +144,10 @@ export function MyProfilePage() {
   }, [characterId, profile, session?.csrf, busy]);
   useEffect(() => {
     const recheck = () => { operation.current?.abort(); setBusy(false); setProfile(null); setBuild(null); setSession(null); setRefresh((previous) => previous + 1); };
-    const show = () => { if (document.visibilityState === 'visible') recheck(); };
+    // Mobile OS permission prompts may briefly hide/show the webview. Do not
+    // unmount an explicit notification setup in progress on return. Logout
+    // broadcasts and real pagehide/session errors still revoke immediately.
+    const show = () => { if (document.visibilityState === 'visible' && !alarmSetup.current) recheck(); };
     const hide = () => { operation.current?.abort(); setProfile(null); setBuild(null); setSession(null); };
     const restore = (event: PageTransitionEvent) => { if (event.persisted) recheck(); };
     try { channel.current = new BroadcastChannel('teyvat-profile-connection'); channel.current.onmessage = recheck; } catch { /* Visibility rechecks remain available. */ }
@@ -158,6 +165,7 @@ export function MyProfilePage() {
     setError(''); setSession(result); navigate('/me', { replace: true }); channel.current?.postMessage('changed');
   }
   async function disconnect() {
+    localResinAlarms.clear();
     operation.current?.abort(); const controller = new AbortController(); operation.current = controller;
     setBusy(true); setError(''); setProfile(null); setBuild(null);
     try { await myProfileRequest('DELETE', undefined, session?.csrf, controller.signal); if (!controller.signal.aborted) { setSession({ available: true, connected: false }); navigate('/me', { replace: true }); channel.current?.postMessage('changed'); } }
@@ -179,12 +187,12 @@ export function MyProfilePage() {
         {profile.unavailable.length > 0 && <p role="status" className="muted">Some details are unavailable. Enable Real-Time Notes in HoYoLAB for daily tasks, and try refreshing later. Available information is shown below.</p>}
         <section className="profile-metrics profile-metrics--overview" aria-label="My account progress">{[['Achievements', profile.stats.achievements], ['Days active', profile.stats.daysActive], ['Characters', profile.stats.characters], ['Spiral Abyss', profile.stats.abyss], ['Imaginarium Theater', profile.stats.theaterAct === null || profile.stats.theaterAct === undefined ? null : `Act ${profile.stats.theaterAct}`], ['Stygian Onslaught', profile.stats.stygian]].map(([label, amount]) => <article key={String(label)}><Trophy size={20} /><span>{label}</span><strong>{typeof amount === 'number' ? value(amount) : amount ?? '—'}</strong></article>)}</section>
         <section className="section-block"><SectionTitle eyebrow="REAL-TIME NOTES" title="Your daily adventure" /><div className="connected-profile-daily">
-          <article className="panel"><div className="eyebrow"><Droplets size={16} />ORIGINAL RESIN</div><h2>{value(notes?.resin)} / {value(notes?.maxResin)}</h2><p>{notes?.resin !== null && notes?.resin !== undefined ? `Full recovery: ${duration(notes.recoverySeconds)}` : 'Enable Real-Time Notes in HoYoLAB to view resin.'}</p></article>
+          <article className="panel"><div className="eyebrow"><Droplets size={16} />ORIGINAL RESIN</div><h2>{value(notes?.resin)} / {value(notes?.maxResin)}</h2><p>{notes?.resin !== null && notes?.resin !== undefined ? `Full recovery: ${duration(notes.recoverySeconds)}` : 'Enable Real-Time Notes in HoYoLAB to view resin.'}</p>{notes?.resin !== null && notes?.resin !== undefined && Boolean(notes.maxResin) && <ResinAlarm key={profile.role.uid} profile={profile} csrf={session.csrf ?? ''} expiresAt={session.expiresAt} onBusyChange={(active) => { alarmSetup.current = active; }} />}</article>
           <article className="panel"><div className="eyebrow">DAILY COMMISSIONS</div><h2>{value(notes?.commissions)} / {value(notes?.maxCommissions)}</h2><p>{notes?.commissionRewardClaimed === null || !notes ? 'Reward status unavailable' : notes.commissionRewardClaimed ? 'Daily reward claimed' : 'Daily reward not claimed'}</p></article>
           <article className="panel"><div className="eyebrow">REALM CURRENCY</div><h2>{value(notes?.realmCurrency)} / {value(notes?.maxRealmCurrency)}</h2><p>Your Serenitea Pot currency at the last refresh.</p></article>
         </div>{Boolean(notes?.expeditions.length) && <div className="connected-profile-expeditions">{notes?.expeditions.map((entry, index) => <article className="panel" key={index}><AsyncImage src={entry.icon} alt="" className="talent-icon" fallback={<AssetPlaceholder kind="character" />} /><strong>Expedition {index + 1}</strong><span>{entry.status === 'Finished' ? 'Ready to collect' : duration(entry.remainingSeconds)}</span></article>)}</div>}</section>
         <section className="section-block"><SectionTitle eyebrow="MY CHARACTERS" title="Owned characters" description="Open a character to view their equipped stats, weapons, artifacts, talents, and constellations when shared by HoYoLAB." /><input className="search-input" type="search" aria-label="Search owned characters" placeholder="Search your characters" value={search} onChange={(event) => setSearch(event.target.value)} /><div className="showcase-grid connected-profile-roster">{characters.map((entry) => <OwnedCharacterCard key={entry.id} entry={entry} uid={profile.role.uid} />)}</div>{!characters.length && <p className="empty-state">{profile.characters.length ? 'No characters match your search.' : 'Owned character details are unavailable from HoYoLAB.'}</p>}</section>
-        <section className="section-block"><SectionTitle eyebrow="EXPLORATION" title="Your journey through Teyvat" /><div className="connected-profile-exploration">{profile.exploration.map((entry, index) => <article className="panel" key={index}><AsyncImage src={entry.icon} alt="" className="talent-icon" fallback={<AssetPlaceholder kind="material" />} /><div><h3>{entry.name}</h3><strong>{entry.percentage === null ? '—' : `${entry.percentage}%`}</strong><p>Level {value(entry.level)}</p></div></article>)}</div><div className="profile-metrics profile-metrics--overview">{[...profile.stats.chests, { label: 'Waypoints', value: profile.stats.waypoints }, { label: 'Domains', value: profile.stats.domains }].map((entry) => <article key={entry.label}><span>{entry.label}</span><strong>{value(entry.value)}</strong></article>)}</div></section>
+        <section className="section-block"><SectionTitle eyebrow="EXPLORATION" title="Your journey through Teyvat" /><div className="connected-profile-exploration">{profile.exploration.map((entry, index) => <article className="panel" key={index}><AsyncImage src={entry.icons?.length ? entry.icons : entry.icon} alt="" className="talent-icon" fallback={<AssetPlaceholder kind="material" />} /><div><h3>{entry.name}</h3><strong>{entry.percentage === null ? '—' : `${entry.percentage}%`}</strong><p>Level {value(entry.level)}</p></div></article>)}</div><div className="profile-metrics profile-metrics--overview">{[...profile.stats.chests, { label: 'Waypoints', value: profile.stats.waypoints }, { label: 'Domains', value: profile.stats.domains }].map((entry) => <article key={entry.label}><span>{entry.label}</span><strong>{value(entry.value)}</strong></article>)}</div></section>
       </>}
       {characterId && <><Link to={`/me/${role?.uid ?? ''}`} className="button secondary"><ArrowLeft size={15} />Back to My Profile</Link>{buildError ? <div role="alert" className="error-box">{buildError}</div> : build ? <ConnectedBuild build={{ ...build, ...enrich(build) }} /> : profile && <div role="status" className="loading">Loading your equipped build…</div>}</>}
       <p className="muted connected-profile-privacy">Your account information is not saved in browser storage or sent to AI Paimon. Disconnect removes this connection from our server. Some HoYoLAB features may be unavailable; this page does not expose every part of your game account.</p>

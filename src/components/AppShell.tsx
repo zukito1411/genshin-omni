@@ -5,6 +5,7 @@ import { useCharacters } from '../hooks/useCharacters';
 import { clearAppCache } from '../api/cache';
 import { clearResponseCache } from '../api/responseCache';
 import { usePaimonContext } from './PaimonCompanion';
+import { ResinAlarmNotifier } from './ResinAlarmNotifier';
 
 const nav = [
   { to: '/', label: 'Home', icon: Home },
@@ -127,6 +128,7 @@ export function AppShell() {
 
   return (
     <div className="app-shell">
+      <ResinAlarmNotifier />
       <aside className="sidebar">
         <Link className="brand" to="/" aria-label="Teyvat Atlas home">
           <div className="brand-mark">

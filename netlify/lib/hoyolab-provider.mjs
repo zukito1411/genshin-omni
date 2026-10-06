@@ -86,5 +86,9 @@ export function createHoyolabProvider(fetcher = fetch) {
       if (!build) throw new ConnectionError('character_unavailable', 404);
       return build;
     },
+    async notes(credentials, role, signal) {
+      const data = await record(credentials, role, 'dailyNote', 'GET', {}, signal);
+      return normalizeProfile(role, null, data, null, Date.now(), []).notes;
+    },
   };
 }

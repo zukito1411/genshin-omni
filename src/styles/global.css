@@ -51,6 +51,26 @@
 .connected-profile-banner { margin-top: 20px; }
 .connected-profile-banner .profile-avatar-frame { display: grid; place-items: center; color: var(--gold); }
 .connected-profile-banner .profile-avatar.image-fallback { display: grid; place-items: center; }
+.resin-alarm { border-top: 1px solid var(--line); margin-top: 16px; padding-top: 14px; min-width: 0; }
+.resin-alarm h3 { display: flex; align-items: center; gap: 8px; font-size: 14px; }
+.resin-alarm p { font-size: 12px; overflow-wrap: anywhere; }
+.resin-alarm__form { display: flex; flex-wrap: wrap; gap: 8px; align-items: end; margin-top: 12px; }
+.resin-alarm__form label { display: grid; gap: 6px; font-size: 12px; min-width: 0; flex: 1 1 110px; }
+.resin-alarm__form input { width: 100%; min-width: 0; min-height: 44px; padding: 9px 10px; border: 1px solid var(--line); border-radius: 8px; background: var(--bg); color: inherit; font: inherit; font-size: 16px; }
+.resin-alarm__form .button { min-height: 44px; font-size: 12px; }
+.resin-alarm__help { margin-top: 10px; font-size: 12px; color: var(--muted); }
+.resin-alarm__help summary { cursor: pointer; min-height: 28px; }
+.resin-alarm__device { display: flex; align-items: center; gap: 8px; margin-top: 12px; font-size: 12px; min-height: 32px; }
+.resin-alarm__device input { width: 18px; height: 18px; flex: none; }
+.resin-notice { position: fixed; top: max(16px, env(safe-area-inset-top)); right: max(16px, env(safe-area-inset-right)); width: min(390px, calc(100vw - 32px)); z-index: 80; display: flex; align-items: flex-start; gap: 12px; padding: 16px; background: var(--panel-2); box-shadow: var(--shadow); }
+.resin-notice > img { flex: none; border-radius: 50%; object-fit: cover; }
+.resin-notice > div { min-width: 0; }
+.resin-notice strong { color: var(--gold); font-size: 14px; }
+.resin-notice p { font-size: 13px; line-height: 1.5; overflow-wrap: anywhere; }
+.resin-notice__dismiss { flex: none; width: 44px; min-height: 44px; display: grid; place-items: center; border: 0; background: transparent; cursor: pointer; }
+@media (max-width: 900px) {
+  .resin-notice { top: auto; bottom: max(16px, env(safe-area-inset-bottom)); max-height: calc(100dvh - 32px); overflow-y: auto; }
+}
 .connected-profile-updated { display: flex; gap: 8px; align-items: center; line-height: 1.5; }
 .connected-profile-daily { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 14px; }
 .connected-profile-daily > article { min-width: 0; padding: 20px; overflow-wrap: anywhere; }

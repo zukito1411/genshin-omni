@@ -60,8 +60,9 @@ unchanged.
 After deployment, a phone may retain its previously saved home-screen icon;
 re-add the home-screen shortcut if necessary. Do not clear website data just
 to refresh an icon, since that can erase local rosters, plans, and Paimon notes.
-This adds install metadata, not offline support: no service worker or private
-account-response caching is introduced.
+This adds install metadata, not offline support. The optional resin notification
+worker handles notifications only; it never intercepts requests or caches private
+account responses.
 
 ## Render
 
@@ -103,6 +104,13 @@ summaries when supplied, exploration, and Real-Time Notes (resin, commissions,
 realm currency, expeditions). Character details load only when opened; a bounded,
 per-session server-memory cache shares recent reads for 30 seconds. Missing
 information is marked unavailable, never fabricated.
+
+Connected profiles automatically resolve the owned UID's public avatar and
+namecard through Enka, without requiring another search. Only artwork filenames
+are returned; HoYoLAB credentials never go to Enka, and public profile/build
+payloads are not stored as part of this lookup. Public in-game changes may take
+a few minutes to appear. Character details parse HoYoLAB's nested `base` and
+property map; exploration uses alternate supplied icons/covers when necessary.
 
 The main connection flow is now **email/username and HoYoverse password**, followed
 by HoYoLAB's CAPTCHA when required. Credentials are RSA-encrypted in the browser
@@ -200,8 +208,65 @@ restricted production deployment before accepting public connections. No test
 uses a real account or an automated CAPTCHA solver. Security testing reduces risk;
 it is not an independent audit or a guarantee against breaches.
 
-Resin is a timestamped HoYoLAB reading, not an invented live counter. This profile
-implementation does not yet include background resin alarms/Web Push delivery.
+Resin is a timestamped HoYoLAB reading, not an invented live counter.
+
+### Paimon resin notifications
+
+When Real-Time Notes supplies resin, **Paimon’s resin alarm** appears below its
+count. Set a whole-number target and Paimon shows a one-time **in-site alert**
+with her face when a fresh HoYoLAB reading reaches that target or higher.
+**No new environment variables, email address, or manual push-key setup is
+needed.** The existing My Profile connection supplies the authenticated resin
+reading. On supported browsers, selecting **Also notify on this device** and
+allowing notifications saves a device alarm that can notify with the app closed.
+
+Optionally select **Also notify on this device** before setting the alarm.
+Permission is requested only from that button gesture, never on page load.
+Netlify automatically generates one persistent Web Push key pair on first setup,
+stores it authenticated-encrypted in Blobs using the existing account encryption
+key, and supplies only the public key to the browser. Conditional writes prevent
+racing cold starts from generating incompatible keys. The configured HTTPS app
+origin is the VAPID subject: no email service/contact address is required. Keys
+survive deploys; changing the account encryption key also resets push setup.
+
+The UI explicitly confirms **Device alarm saved. You can close the app.** only
+after the server accepts the alarm. Device alarms are restored after reloading
+and can be cancelled under Original Resin. Their encrypted records contain an
+owned UID, target, browser subscription, and reference to the existing session,
+never a duplicate HoYoLAB login token. Disconnect/session expiry stops delivery;
+the existing connected session still expires after 24 hours. Targets predicted
+after expiry must be lowered or set after reconnecting. Notifications contain
+resin only, not a nickname, UID or login information (resin may appear on the
+lock screen). Browser push services receive the encrypted notification, not the
+private profile or HoYoLAB credentials. Nothing is automatically sent to AI.
+
+The production Netlify scheduled function `resin-notifications` checks due alarms
+every five minutes (288 invocations/day; hosting/Blobs quotas apply). It re-reads
+actual HoYoLAB resin: spending resin reschedules the check, instead of sending
+an invented timer-based count. Strong reads, conditional alarm leases, idempotent
+save IDs, and a final cancellation/session check prevent duplicate or revoked
+sends. Already accepted OS messages cannot be recalled. Short-lived deliveries
+use a five-minute TTL; outages back off, expired subscriptions stop, and hourly
+cleanup removes expired alarm records. Passes are bounded to 1,000 records, 30
+due alarms and approximately 20 seconds of work; larger deployments require a
+queue/partitioning. This is not an exact-time or guaranteed-delivery alarm.
+
+Denied permission or unavailable Web Push leaves the open-app in-site alarm
+available, with clear guidance that closing/reloading cancels that fallback.
+Push-mode clients do not run a second local resin notifier; incoming worker
+messages update the in-site alert without sending duplicate OS notifications.
+No private profile/UID/CSRF/target is persisted in localStorage/IndexedDB. The
+notification worker never fetches private notes, caches responses, or runs timers.
+
+On iPhone/iPad, use the installed Home Screen app on iOS 16.4+; Android/desktop
+need a browser supporting Web Push and notification permission. Delivery depends
+on connectivity, OS/browser/Focus settings and upstream service availability.
+Redeploy on Netlify to enable the included scheduled function. Render Static
+Sites alone cannot run this backend. Automated tests use fake accounts and mocked
+push delivery; test a real closed-app notification on your own installed app
+after deployment before advertising guaranteed delivery. See [WebKit’s Home
+Screen notification guidance](https://webkit.org/blog/13878/web-push-for-web-apps-on-ios-and-ipados/)
+and [Netlify scheduled functions](https://docs.netlify.com/build/functions/scheduled-functions/).
 
 ## Local Paimon notebook and tools
 
