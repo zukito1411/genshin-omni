@@ -80,13 +80,22 @@ realm currency, expeditions). Character details load only when opened; a bounded
 per-session server-memory cache shares recent reads for 30 seconds. Missing
 information is marked unavailable, never fabricated.
 
-This is **not official HoYoLAB OAuth**. The verified integration uses an existing
-HoYoLAB session: matching `ltuid_v2` / `ltoken_v2`, or legacy `ltuid` / `ltoken`.
-The advanced connection help explains this. The site never asks for a game
-password, automatically enables privacy settings, claims rewards, or bypasses
-HoYoLAB verification. Session tokens remain sensitive even though this backend
-exposes only account-reading operations. Connecting on mobile may require first
-obtaining a session on desktop; there is no fabricated one-click mobile login.
+The main connection flow is now **email/username and HoYoverse password**, followed
+by HoYoLAB's CAPTCHA when required. Credentials are RSA-encrypted in the browser
+for HoYoLAB's public key before being sent to `/api/hoyolab-login`; this backend
+does not have the private key and never stores passwords or their ciphertexts.
+After successful authentication, only the account-reading session cookies are
+kept in the encrypted profile record. The RSA library loads only on sign-in.
+
+This remains **an unofficial integration, not official HoYoLAB OAuth**. It uses
+the community-documented global web-login protocol from genshin.py. Google,
+Apple, and other social logins are not implemented. Unexpected security checks
+fail closed instead of bypassing verification. There is no QR-login promise:
+the maintained library's QR flow is for mainland Miyoushe, not global HoYoLAB.
+The original `ltuid_v2` / `ltoken_v2` (or legacy) import remains available only
+inside the collapsed **Advanced session connection (optional)** section.
+No privacy settings are automatically changed and no rewards are claimed.
+Neither connection method automatically signs into the external official map.
 
 The backend is in the same repository, deployed as Netlify Functions. Netlify
 Blobs supplies private persistence; no separate Render server/database is needed.
@@ -116,12 +125,25 @@ Netlify Functions; no personal Netlify access token belongs in the frontend.
 Production-only checks disable linking on Deploy Previews/branch deploys.
 Changing the encryption key invalidates previous connections. Disabling
 `HOYOLAB_ENABLED` stops account access immediately. Netlify usage quotas apply.
+Direct sign-in uses these same three settings; no additional API key is needed.
+Optionally set `HOYOLAB_DIRECT_LOGIN=false` to disable password sign-in while
+keeping existing connected sessions and advanced session import available.
 
 Security boundaries:
 
 - HoYoLAB credentials and connection records are AES-256-GCM encrypted, bound
   to the exact origin and an unguessable session key. Storage reads use strong
   consistency so disconnects take effect immediately.
+- Direct sign-in accepts only bounded 2048-bit RSA ciphertexts, not plaintext
+  emails/passwords. Provider destinations are fixed, redirects are rejected,
+  and password attempts are never automatically retried. HoYoLAB's extra
+  cookies (such as cookie tokens and stokens) are discarded, not persisted.
+- CAPTCHA continuation tickets are authenticated-encrypted, bound to the
+  originating browser and encrypted credentials, and expire after five minutes.
+  Atomic, short-lived used-ticket records prevent replay across function
+  instances. HoYoLAB verifies the user's CAPTCHA proof before a profile session
+  can be created. Cancel/tab-hide clears pending browser credentials; failures
+  clear the password field. No login data is stored in local/session storage.
 - The browser receives only a random `__Host-` cookie (`HttpOnly`, `Secure`,
   `SameSite=Strict`) and a CSRF token held in memory. Connections expire after
   24 hours. Disconnect deletes the server record and clears this cookie.
@@ -136,8 +158,10 @@ Security boundaries:
   rejected. Raw provider errors/credentials are not logged or exposed.
 - Netlify platform rate limiting plus a bounded warm-instance throttle protect
   this endpoint. CSP restricts scripts to the site's own assets; inline styles
-  remain allowed for the existing animated UI. Frame blocking and MIME-sniffing
-  protection are configured for both Netlify and Render.
+  remain allowed for the existing animated UI. CAPTCHA scripts execute only in
+  an opaque-origin sandbox with a separate nonce-based CSP and allowlisted
+  CAPTCHA domains. They cannot access the app document, credentials, cookies,
+  or storage. Other pages retain frame blocking and MIME-sniffing protection.
 - The hourly scheduled cleanup removes expired encrypted records on a
   best-effort bounded pass. Expired sessions are denied immediately regardless
   of cleanup; retention is not an exact deletion-time guarantee at large scale.
@@ -147,8 +171,9 @@ Provider routes/field definitions are cross-checked against the maintained
 [genshin.py implementation](https://github.com/seriaati/genshin.py). This is an
 unofficial HoYoLAB integration; upstream changes, session expiry, and verification
 challenges can prevent live access. Tests use fake credentials and mocked provider
-responses, not a real HoYoLAB login. Configure and verify on a restricted production
-deployment before accepting public connections. Security testing reduces risk;
+responses, not a real HoYoLAB login. Direct login/CAPTCHA must be verified on a
+restricted production deployment before accepting public connections. No test
+uses a real account or an automated CAPTCHA solver. Security testing reduces risk;
 it is not an independent audit or a guarantee against breaches.
 
 Resin is a timestamped HoYoLAB reading, not an invented live counter. This profile

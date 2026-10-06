@@ -1,5 +1,5 @@
 export interface ConnectedRole { uid: string; region: string; server: string; nickname: string; level: number | null; }
-export interface ProfileSession { available: boolean; connected: boolean; roles?: ConnectedRole[]; csrf?: string; expiresAt?: number; }
+export interface ProfileSession { available: boolean; connected: boolean; directLogin?: boolean; roles?: ConnectedRole[]; csrf?: string; expiresAt?: number; }
 export interface PrivateCharacter { id: number; name: string; icon: string; element: string; rarity: number | null; level: number | null; friendship: number | null; constellation: number | null; }
 export interface PrivateStat { label: string; value: string; }
 export interface PrivateEquipment { name: string; icon: string; level: number | null; stats: PrivateStat[]; }

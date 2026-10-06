@@ -37,6 +37,14 @@ export function cookieToken(request) {
   return /^[A-Za-z0-9_-]{43}$/.test(value) ? value : null;
 }
 export const cookieHeader = (token) => `${COOKIE}=${token ?? ''}; Path=/; HttpOnly; Secure; SameSite=Strict; Max-Age=${token ? SESSION_MS / 1000 : 0}`;
+export async function connectedSession(store, config, credentials, roles, now = Date.now) {
+  const token = randomToken();
+  const key = `${digest(config.origin)}/${digest(token)}`;
+  const session = { origin: config.origin, credentials, roles, csrf: randomToken(), expiresAt: now() + SESSION_MS };
+  const write = await store.setJSON(key, seal(session, config.key, key), { onlyIfNew: true, metadata: { expiresAt: session.expiresAt } });
+  if (write.modified === false) throw new ConnectionError('unavailable');
+  return { session, key, cookie: cookieHeader(token) };
+}
 export function equalTokens(a, b) {
   if (typeof a !== 'string' || typeof b !== 'string' || !/^[A-Za-z0-9_-]{43}$/.test(a) || !/^[A-Za-z0-9_-]{43}$/.test(b)) return false;
   return timingSafeEqual(Buffer.from(a), Buffer.from(b));

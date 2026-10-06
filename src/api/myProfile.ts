@@ -14,6 +14,14 @@ const messages: Record<string, string> = {
   character_unavailable: 'This character’s equipped details are unavailable. Your other profile information is still here.',
   already_connected: 'Disconnect the current account before connecting another one.',
   unavailable: 'HoYoLAB could not be reached. Please try again later.',
+  invalid_login: 'Please enter your HoYoverse email or username and password.',
+  login_browser: 'Secure sign-in is not supported by this browser. Please use an updated browser over HTTPS.',
+  login_failed: 'Sign-in failed. Check your email or username and password. Use your HoYoverse credentials, not a Google or Apple password.',
+  login_locked: 'HoYoLAB temporarily locked sign-in after too many attempts. Please wait and try again later.',
+  login_verification: 'HoYoLAB could not complete the security check. Please try again or check your account on the official HoYoLAB website.',
+  login_expired: 'The sign-in check expired or was already used. Please sign in again.',
+  login_unavailable: 'HoYoLAB sign-in is unavailable right now. Please try again later. UID Search still works.',
+  login_cancelled: 'Sign-in was cancelled. Please try again when you are ready.',
 };
 export class MyProfileError extends Error {
   code: string;

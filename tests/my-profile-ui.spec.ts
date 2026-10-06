@@ -1,5 +1,6 @@
 import { expect, test, type Page } from '@playwright/test';
 import { readFileSync } from 'node:fs';
+import { captchaPage } from '../netlify/functions/hoyolab-captcha.mjs';
 import type { PrivateBuild, PrivateProfile } from '../src/types/myProfile';
 
 const role = { uid: '800000001', region: 'os_asia', server: 'Asia', nickname: 'Private Traveler', level: 60 };
@@ -41,9 +42,10 @@ async function mock(page: Page, options: { available?: boolean; connected?: bool
   return requests;
 }
 async function connect(page: Page) {
+  await page.getByText('Advanced session connection (optional)', { exact: true }).click();
   await page.getByLabel('HoYoLAB account ID', { exact: true }).fill('12345');
   await page.getByLabel('HoYoLAB session token', { exact: true }).fill('fixture-session-token-not-real');
-  await page.getByRole('checkbox').check();
+  await page.getByRole('checkbox', { name: /securely storing my session/ }).check();
   await page.getByRole('button', { name: 'Connect account', exact: true }).click();
   await expect(page.getByRole('heading', { name: role.nickname, exact: true })).toBeVisible();
 }
@@ -65,7 +67,7 @@ test('connection consent, readable daily notes and owned builds work across mobi
   const errors: string[] = [];
   page.on('pageerror', (error) => errors.push(error.message));
   await page.goto('/me');
-  await expect(page.getByRole('button', { name: 'Connect account', exact: true })).toBeDisabled();
+  await expect(page.getByRole('button', { name: 'Sign in', exact: true })).toBeDisabled();
   await connect(page);
   await expect(page.locator('.connected-profile-daily')).toContainText('40 / 200');
   await expect(page.locator('.connected-profile-daily')).toContainText('Daily reward claimed');
@@ -95,6 +97,129 @@ test('connection consent, readable daily notes and owned builds work across mobi
   const profileRequests = requests.filter((request) => request.body?.action === 'profile' || request.body?.action === 'character');
   expect(profileRequests.every((request) => request.headers['x-teyvat-csrf'] === 'c'.repeat(43))).toBe(true);
   expect(errors).toEqual([]);
+});
+
+test('direct sign-in is the main flow, encrypts credentials, and keeps tokens out of the default UI', async ({ page }) => {
+  const requests = await mock(page);
+  const loginRequests: any[] = [];
+  await page.route('**/api/hoyolab-login', (route) => {
+    loginRequests.push(route.request().postDataJSON());
+    return route.fulfill({ json: { available: true, connected: true, roles: [role], csrf: 'c'.repeat(43) } });
+  });
+  await page.goto('/me');
+  await expect(page.getByLabel('HoYoLAB session token', { exact: true })).not.toBeVisible();
+  for (const width of [320, 390, 768, 1366]) {
+    await page.setViewportSize({ width, height: 844 });
+    expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+    await expect(page.getByRole('button', { name: 'Sign in', exact: true })).toBeVisible();
+    if (width === 390) await page.screenshot({ path: 'test-results/hoyolab-login-mobile.png', fullPage: true });
+  }
+  await page.getByLabel('Email or username', { exact: true }).fill('test@example.invalid');
+  await page.getByLabel('HoYoverse password', { exact: true }).fill('fake-password-only');
+  await page.getByRole('button', { name: 'Show password', exact: true }).click();
+  await expect(page.getByLabel('HoYoverse password', { exact: true })).toHaveAttribute('type', 'text');
+  await page.getByRole('button', { name: 'Hide password', exact: true }).click();
+  await page.getByRole('checkbox', { name: /I agree to connect it/ }).check();
+  await page.getByRole('button', { name: 'Sign in', exact: true }).click();
+  await expect(page.getByRole('heading', { name: role.nickname, exact: true })).toBeVisible();
+  expect(loginRequests).toHaveLength(1);
+  expect(loginRequests[0].action).toBe('login');
+  for (const name of ['account', 'password']) expect(Buffer.from(loginRequests[0][name], 'base64')).toHaveLength(256);
+  expect(JSON.stringify(loginRequests)).not.toContain('fake-password-only');
+  expect(JSON.stringify(loginRequests)).not.toContain('test@example.invalid');
+  expect(requests.some((request) => request.body?.action === 'connect')).toBe(false);
+  expect(await page.evaluate(() => JSON.stringify({ ...localStorage, ...sessionStorage }))).not.toMatch(/fake-password|test@example/);
+});
+
+test('direct login errors are safe and passwords are cleared on failure and tab hiding', async ({ page }) => {
+  await mock(page);
+  await page.route('**/api/hoyolab-login', (route) => route.fulfill({ status: 401, json: { code: 'login_failed', message: 'raw-secret-do-not-display' } }));
+  await page.goto('/me');
+  await page.getByLabel('Email or username', { exact: true }).fill('fixture@example.invalid');
+  await page.getByLabel('HoYoverse password', { exact: true }).fill('fake-password-only');
+  await page.getByRole('checkbox', { name: /I agree to connect it/ }).check();
+  await page.getByRole('button', { name: 'Sign in', exact: true }).click();
+  await expect(page.getByRole('alert')).toContainText('Check your email or username and password');
+  await expect(page.getByLabel('HoYoverse password', { exact: true })).toHaveValue('');
+  await expect(page.locator('main')).not.toContainText('raw-secret-do-not-display');
+  await page.getByLabel('HoYoverse password', { exact: true }).fill('another-fake-password');
+  await page.evaluate(() => { Object.defineProperty(document, 'visibilityState', { configurable: true, value: 'hidden' }); document.dispatchEvent(new Event('visibilitychange')); });
+  await expect(page.getByLabel('HoYoverse password', { exact: true })).toHaveValue('');
+});
+
+test('cancelled sign-in ignores a late response and the direct-login kill switch keeps the easy UID option', async ({ page }) => {
+  await mock(page);
+  let release: (() => void) | undefined;
+  let started = false;
+  await page.route('**/api/hoyolab-login', async (route) => {
+    if (route.request().method() === 'DELETE') return route.fulfill({ json: { cancelled: true } });
+    started = true; await new Promise<void>((resolve) => { release = resolve; });
+    await route.fulfill({ json: { available: true, connected: true, roles: [role], csrf: 'c'.repeat(43) } }).catch(() => undefined);
+  });
+  await page.goto('/me');
+  await page.getByLabel('Email or username', { exact: true }).fill('fixture@example.invalid');
+  await page.getByLabel('HoYoverse password', { exact: true }).fill('fake-password-only');
+  await page.getByRole('checkbox', { name: /I agree to connect it/ }).check();
+  await page.getByRole('button', { name: 'Sign in', exact: true }).click();
+  await expect.poll(() => started).toBe(true);
+  await page.getByRole('button', { name: 'Cancel sign-in' }).click();
+  release?.();
+  await expect(page.getByRole('button', { name: 'Sign in', exact: true })).toBeEnabled();
+  await expect(page.getByLabel('HoYoverse password', { exact: true })).toHaveValue('');
+  await expect(page.getByRole('heading', { name: role.nickname, exact: true })).toHaveCount(0);
+  await page.route('**/api/my-profile', (route) => route.fulfill({ json: { available: true, connected: false, directLogin: false } }));
+  await page.reload();
+  await expect(page.getByText('Direct sign-in is temporarily unavailable on this site.', { exact: false })).toBeVisible();
+  await expect(page.getByLabel('HoYoverse password', { exact: true })).toHaveCount(0);
+  await expect(page.getByRole('link', { name: 'UID Search', exact: true }).last()).toBeVisible();
+});
+
+test('CAPTCHA runs in an isolated mobile dialog and authenticates only after a real server result', async ({ page }) => {
+  const diagnostics: string[] = [];
+  page.on('console', (message) => { if (message.type() === 'error') diagnostics.push(message.text()); });
+  page.on('pageerror', (error) => diagnostics.push(error.message));
+  await mock(page);
+  const policy = readFileSync('netlify.toml', 'utf8').match(/Content-Security-Policy = "([^"]+)"/)![1];
+  if (process.env.PLAYWRIGHT_PRODUCTION === '1') await page.route('http://127.0.0.1:4173/me', async (route) => {
+    const response = await route.fetch(); return route.fulfill({ response, headers: { ...response.headers(), 'content-security-policy': policy } });
+  });
+  await page.route('**/api/hoyolab-captcha', async (route) => {
+    const response = captchaPage('http://127.0.0.1:4173');
+    return route.fulfill({ status: 200, headers: Object.fromEntries(response.headers), body: await response.text() });
+  });
+  await page.route('https://static.geetest.com/static/js/gt.0.5.0.js', (route) => route.fulfill({ contentType: 'text/javascript', body: `window.initGeetest = (config, callback) => {
+    let success; const instance = { appendTo: (selector) => { const button = document.createElement('button'); button.textContent = 'Complete test security check'; button.onclick = () => success(); document.querySelector(selector).append(button); }, onReady: (cb) => cb(), onError: () => {}, onSuccess: (cb) => { success = cb; }, getValidate: () => ({ geetest_challenge: 'fixture-challenge', geetest_validate: 'fixture-validation', geetest_seccode: 'fixture-validation|jordan' }) };
+    window.parentAccessible = false; try { window.parentAccessible = !!parent.document; } catch {}
+    callback(instance);
+  };` }));
+  const requests: any[] = [];
+  await page.route('**/api/hoyolab-login', (route) => {
+    const input = route.request().postDataJSON(); requests.push(input);
+    return route.fulfill({ json: input.action === 'login' ? { challenge: { version: 3, sessionId: 'fixture-session', gt: 'a'.repeat(32), challenge: 'fixture-challenge', newCaptcha: true, offline: false }, ticket: 'fixture-ticket', expiresAt: Date.now() + 300000 } : { available: true, connected: true, roles: [role], csrf: 'c'.repeat(43) } });
+  });
+  await page.setViewportSize({ width: 320, height: 740 });
+  await page.goto('/me');
+  await page.getByLabel('Email or username', { exact: true }).fill('fixture@example.invalid');
+  await page.getByLabel('HoYoverse password', { exact: true }).fill('fake-password-only');
+  await page.getByRole('checkbox', { name: /I agree to connect it/ }).check();
+  await page.getByRole('button', { name: 'Sign in', exact: true }).click();
+  await expect(page.getByRole('dialog')).toBeVisible();
+  const captcha = page.frameLocator('iframe[title="HoYoLAB login security challenge"]');
+  try { await expect(captcha.getByRole('button', { name: 'Complete test security check' })).toBeVisible(); }
+  catch (error) { throw new Error(`${error}\nBrowser diagnostics: ${diagnostics.join('\n')}`); }
+  const child = page.frames().find((entry) => entry.url().includes('/api/hoyolab-captcha'))!;
+  expect(await child.evaluate(() => (window as any).parentAccessible)).toBe(false);
+  expect(await child.evaluate(() => { try { return !!localStorage; } catch { return false; } })).toBe(false);
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+  await page.evaluate(() => window.postMessage({ type: 'captcha-success', id: 'invalid', proof: {} }, '*'));
+  expect(requests).toHaveLength(1);
+  await captcha.getByRole('button', { name: 'Complete test security check' }).click();
+  await expect(page.getByRole('heading', { name: role.nickname, exact: true })).toBeVisible();
+  expect(requests).toHaveLength(2);
+  expect(requests[1].action).toBe('verify');
+  expect(requests[1].account).toBe(requests[0].account);
+  expect(requests[1].password).toBe(requests[0].password);
+  await expect(page.getByRole('dialog')).toHaveCount(0);
 });
 
 test('disconnect clears private screens and preserves roster preferences', async ({ page }) => {

@@ -1,6 +1,6 @@
 import { getStore } from '@netlify/blobs';
 import { createHoyolabProvider, ConnectionError, parseCredentials } from '../lib/hoyolab-provider.mjs';
-import { checkRequest, configuration, cookieHeader, cookieToken, digest, equalTokens, json, randomToken, requestBody, seal, SESSION_MS, STORE, unseal } from '../lib/profile-security.mjs';
+import { checkRequest, configuration, connectedSession, cookieHeader, cookieToken, digest, equalTokens, json, requestBody, STORE, unseal } from '../lib/profile-security.mjs';
 
 // Factory permits isolated security tests without real credentials or provider calls.
 export function createProfileHandler({ storeFactory = () => getStore({ name: STORE, consistency: 'strong' }), provider = createHoyolabProvider(), env = process.env, now = Date.now } = {}) {
@@ -50,7 +50,7 @@ export function createProfileHandler({ storeFactory = () => getStore({ name: STO
           }
         }
       }
-      const status = (value) => ({ available: true, connected: Boolean(value), ...(value ? { roles: value.roles, csrf: value.csrf, expiresAt: value.expiresAt } : {}) });
+      const status = (value) => ({ available: true, directLogin: env.HOYOLAB_DIRECT_LOGIN !== 'false', connected: Boolean(value), ...(value ? { roles: value.roles, csrf: value.csrf, expiresAt: value.expiresAt } : {}) });
       if (request.method === 'GET') return json(status(session), 200, sessionKey && !session ? { 'Set-Cookie': cookieHeader(null) } : {});
       if (request.method === 'DELETE') {
         if (session && !equalTokens(request.headers.get('x-teyvat-csrf'), session.csrf)) throw new ConnectionError('forbidden', 403);
@@ -64,12 +64,8 @@ export function createProfileHandler({ storeFactory = () => getStore({ name: STO
         if (payload.consent !== true || session) throw new ConnectionError(session ? 'already_connected' : 'consent_required', 400);
         const credentials = parseCredentials(payload);
         const roles = await provider.roles(credentials); // Ownership is from HoYoLAB, not a submitted UID.
-        const newToken = randomToken();
-        const key = `${digest(config.origin)}/${digest(newToken)}`;
-        const value = { origin: config.origin, credentials, roles, csrf: randomToken(), expiresAt: now() + SESSION_MS };
-        const write = await store.setJSON(key, seal(value, config.key, key), { onlyIfNew: true, metadata: { expiresAt: value.expiresAt } });
-        if (write.modified === false) throw new ConnectionError('unavailable');
-        return json(status(value), 200, { 'Set-Cookie': cookieHeader(newToken) });
+        const result = await connectedSession(store, config, credentials, roles, now);
+        return json(status(result.session), 200, { 'Set-Cookie': result.cookie });
       }
       if (!session) throw new ConnectionError('reconnect', 401);
       if (!equalTokens(request.headers.get('x-teyvat-csrf'), session.csrf)) throw new ConnectionError('forbidden', 403);
