@@ -1,9 +1,10 @@
 import { getStore } from '@netlify/blobs';
 import { createHoyolabProvider, ConnectionError, parseCredentials } from '../lib/hoyolab-provider.mjs';
+import { createEnkaArtworkProvider } from '../lib/enka-artwork.mjs';
 import { checkRequest, configuration, connectedSession, cookieHeader, cookieToken, digest, equalTokens, json, requestBody, STORE, unseal } from '../lib/profile-security.mjs';
 
 // Factory permits isolated security tests without real credentials or provider calls.
-export function createProfileHandler({ storeFactory = () => getStore({ name: STORE, consistency: 'strong' }), provider = createHoyolabProvider(), env = process.env, now = Date.now } = {}) {
+export function createProfileHandler({ storeFactory = () => getStore({ name: STORE, consistency: 'strong' }), provider = createHoyolabProvider(), artworkProvider = createEnkaArtworkProvider(), env = process.env, now = Date.now } = {}) {
   const cache = new Map();
   const rate = new Map();
   function throttle(client) {
@@ -58,7 +59,7 @@ export function createProfileHandler({ storeFactory = () => getStore({ name: STO
         return json(status(null), 200, { 'Set-Cookie': cookieHeader(null) });
       }
       const payload = await requestBody(request);
-      const allowed = payload.action === 'connect' ? ['action', 'accountId', 'token', 'version', 'consent'] : payload.action === 'profile' ? ['action', 'uid'] : ['action', 'uid', 'characterId'];
+      const allowed = payload.action === 'connect' ? ['action', 'accountId', 'token', 'version', 'consent'] : ['profile', 'artwork'].includes(payload.action) ? ['action', 'uid'] : ['action', 'uid', 'characterId'];
       if (Object.keys(payload).some((key) => !allowed.includes(key))) throw new ConnectionError('invalid_request', 400);
       if (payload.action === 'connect') {
         if (payload.consent !== true || session) throw new ConnectionError(session ? 'already_connected' : 'consent_required', 400);
@@ -69,14 +70,18 @@ export function createProfileHandler({ storeFactory = () => getStore({ name: STO
       }
       if (!session) throw new ConnectionError('reconnect', 401);
       if (!equalTokens(request.headers.get('x-teyvat-csrf'), session.csrf)) throw new ConnectionError('forbidden', 403);
-      if (!['profile', 'character'].includes(payload.action)) throw new ConnectionError('invalid_request', 400);
+      if (!['profile', 'character', 'artwork'].includes(payload.action)) throw new ConnectionError('invalid_request', 400);
       const role = session.roles.find((entry) => entry.uid === payload.uid);
       if (!role) throw new ConnectionError('forbidden', 403);
-      const profile = await cached(`${sessionKey}:${role.uid}:profile`, () => provider.profile(session.credentials, role), session.expiresAt);
       async function ensureActive() {
         const entry = await store.getMetadata(sessionKey);
         if (!entry || session.expiresAt <= now()) throw new ConnectionError('reconnect', 401);
       }
+      if (payload.action === 'artwork') {
+        const artwork = await cached(`${sessionKey}:${role.uid}:artwork`, () => artworkProvider.get(role.uid), session.expiresAt);
+        await ensureActive(); return json({ artwork });
+      }
+      const profile = await cached(`${sessionKey}:${role.uid}:profile`, () => provider.profile(session.credentials, role), session.expiresAt);
       if (payload.action === 'profile') { await ensureActive(); return json({ profile }); }
       if (typeof payload.characterId !== 'number' || !Number.isSafeInteger(payload.characterId) || !profile.characters.some((entry) => entry.id === payload.characterId)) throw new ConnectionError('forbidden', 403);
       const character = await cached(`${sessionKey}:${role.uid}:${payload.characterId}`, () => provider.character(session.credentials, role, payload.characterId), session.expiresAt);

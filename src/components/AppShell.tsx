@@ -130,8 +130,13 @@ export function AppShell() {
       <aside className="sidebar">
         <Link className="brand" to="/" aria-label="Teyvat Atlas home">
           <div className="brand-mark">
-            <picture style={{ display: 'contents' }}><source srcSet="/assets/logo.webp" type="image/webp" /><img
-              src="/assets/logo.png"
+            <picture style={{ display: 'contents' }}><source srcSet="/assets/logo-32-v1.webp 32w, /assets/logo-64-v1.webp 64w, /assets/logo-96-v1.webp 96w, /assets/logo-128-v1.webp 128w" sizes="32px" type="image/webp" /><img
+              src="/assets/logo-64-v1.png"
+              srcSet="/assets/logo-32-v1.png 32w, /assets/logo-64-v1.png 64w, /assets/logo-96-v1.png 96w, /assets/logo-128-v1.png 128w"
+              sizes="32px"
+              width={32}
+              height={32}
+              decoding="async"
               alt="Teyvat Atlas logo"
             /></picture>
           </div>

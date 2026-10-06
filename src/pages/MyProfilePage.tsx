@@ -1,10 +1,11 @@
 import { memo, useDeferredValue, useEffect, useMemo, useRef, useState, type FormEvent } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
-import { ArrowLeft, ArrowRight, Clock, Droplets, ExternalLink, LogOut, RefreshCw, ShieldCheck, Trophy, UserRound } from 'lucide-react';
+import { ArrowLeft, ArrowRight, Clock, Droplets, ExternalLink, LogOut, RefreshCw, ShieldCheck, Trophy } from 'lucide-react';
 import { SectionTitle } from '../components/SectionTitle';
 import { AsyncImage } from '../components/AsyncImage';
 import { AssetPlaceholder } from '../components/AssetPlaceholder';
 import { HoYoLabLoginForm } from '../components/HoYoLabLoginForm';
+import { ConnectedProfileBanner } from '../components/ConnectedProfileBanner';
 import { usePaimonContext } from '../components/PaimonCompanion';
 import { useCharacters } from '../hooks/useCharacters';
 import { characterImageSources } from '../api/genshinDev';
@@ -173,7 +174,7 @@ export function MyProfilePage() {
       {!role && <div className="empty-state">This UID is not connected to your HoYoLAB account. Choose one of your accounts above.</div>}
       {loading && <div className="detail-loading" role="status" aria-label="Loading your profile"><div className="skeleton-hero" /><div className="skeleton-line" /></div>}
       {profile && !characterId && <>
-        <section className="profile-banner panel connected-profile-banner"><div className="profile-banner__content"><div className="profile-avatar-frame"><UserRound size={42} /></div><div className="profile-banner__copy"><div className="eyebrow">MY CONNECTED PROFILE</div><h2>{profile.role.nickname}</h2><p>{profile.role.server} · UID {profile.role.uid} · Adventure Rank {value(profile.role.level)}</p><span className="pill"><ShieldCheck size={13} />Private connection</span></div></div></section>
+        <ConnectedProfileBanner key={profile.role.uid} role={profile.role} csrf={session.csrf ?? ''} onExpired={() => { setProfile(null); setBuild(null); setSession({ available: true, connected: false }); setError('Your connection has expired. Please connect your HoYoLAB account again.'); }} />
         <p className="muted connected-profile-updated"><Clock size={14} />Last updated {new Date(profile.updatedAt).toLocaleString()}. Values reflect that reading, not a live game connection.</p>
         {profile.unavailable.length > 0 && <p role="status" className="muted">Some details are unavailable. Enable Real-Time Notes in HoYoLAB for daily tasks, and try refreshing later. Available information is shown below.</p>}
         <section className="profile-metrics profile-metrics--overview" aria-label="My account progress">{[['Achievements', profile.stats.achievements], ['Days active', profile.stats.daysActive], ['Characters', profile.stats.characters], ['Spiral Abyss', profile.stats.abyss], ['Imaginarium Theater', profile.stats.theaterAct === null || profile.stats.theaterAct === undefined ? null : `Act ${profile.stats.theaterAct}`], ['Stygian Onslaught', profile.stats.stygian]].map(([label, amount]) => <article key={String(label)}><Trophy size={20} /><span>{label}</span><strong>{typeof amount === 'number' ? value(amount) : amount ?? '—'}</strong></article>)}</section>

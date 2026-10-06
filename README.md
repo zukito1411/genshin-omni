@@ -39,6 +39,30 @@ npm run build
 npm run preview
 ```
 
+## Installed app artwork
+
+The manifest supplies 192px/512px Android icons, a separate mask-safe icon, and
+a 180px iPhone touch icon. They are generated from the existing 500px logo;
+the 512px standard icon keeps the source at native resolution on a padded
+canvas rather than inventing extra detail. Header artwork uses small lossless
+32px–128px WebP/PNG variants selected for the screen's pixel density. Regenerate
+these checked-in assets after updating the source logo with `npm run assets:icons`.
+
+News banners prefer declared originals of the same cover and honor supplied
+responsive image sets. Public HoYoLAB uploads use bounded 320px–2048px WebP
+variants matching the existing centered crop and measured display width. Failed
+processed images fall back to originals; signed URLs and intentional image
+transformations are left untouched. If every image fails, the article stays
+readable without endlessly retrying the same URLs. Low-resolution source artwork
+cannot gain new detail from resizing. The layout and decorative background are
+unchanged.
+
+After deployment, a phone may retain its previously saved home-screen icon;
+re-add the home-screen shortcut if necessary. Do not clear website data just
+to refresh an icon, since that can erase local rosters, plans, and Paimon notes.
+This adds install metadata, not offline support: no service worker or private
+account-response caching is introduced.
+
 ## Render
 
 Deploy as a **Render Static Site**:

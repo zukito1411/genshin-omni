@@ -16,9 +16,11 @@ import {
   Sparkles,
 } from 'lucide-react';
 import { SectionTitle } from '../components/SectionTitle';
+import { NewsBannerImage } from '../components/NewsBannerImage';
 import { useCharacters } from '../hooks/useCharacters';
 import { usePageActive } from '../hooks/usePageActive';
 import { getJson } from '../api/http';
+import { newsImageCandidates } from '../utils/newsImages';
 
 interface GenshinNewsItem {
   id?: string;
@@ -38,56 +40,6 @@ interface GenshinNewsFeed {
 
 const NEWS_FEED_URL = 'https://feeds.c3kay.de/genshin.json';
 const NEWS_ROTATION_MS = 6000;
-
-function normalizeImageUrl(value?: string): string | null {
-  if (!value) return null;
-  const trimmed = value.trim();
-  if (!trimmed) return null;
-  if (trimmed.startsWith('//')) return `https:${trimmed}`;
-
-  try {
-    const url = new URL(trimmed);
-    if (url.protocol === 'http:' || url.protocol === 'https:') {
-      return url.toString();
-    }
-  } catch {
-    return null;
-  }
-
-  return null;
-}
-
-function extractArticleImages(html?: string): string[] {
-  if (!html) return [];
-
-  try {
-    const document = new DOMParser().parseFromString(html, 'text/html');
-    const images = Array.from(document.querySelectorAll('img'));
-
-    return images
-      .flatMap((image) => [
-        image.getAttribute('src'),
-        image.getAttribute('data-src'),
-        image.getAttribute('data-original'),
-        image.getAttribute('data-lazy-src'),
-      ])
-      .map((value) => normalizeImageUrl(value ?? undefined))
-      .filter((value): value is string => Boolean(value));
-  } catch {
-    return [];
-  }
-}
-
-function getNewsImageCandidates(item: GenshinNewsItem): string[] {
-  return Array.from(
-    new Set(
-      [
-        normalizeImageUrl(item.image),
-        ...extractArticleImages(item.content_html),
-      ].filter((value): value is string => Boolean(value)),
-    ),
-  );
-}
 
 function formatNewsDate(value?: string): string {
   if (!value) return '';
@@ -111,7 +63,6 @@ export function DashboardPage() {
   const [newsIndex, setNewsIndex] = useState(0);
   const [newsLoading, setNewsLoading] = useState(true);
   const [newsError, setNewsError] = useState(false);
-  const [newsImageIndex, setNewsImageIndex] = useState(0);
   const newsTitleBoxRef = useRef<HTMLDivElement | null>(null);
   const newsTitleRef = useRef<HTMLHeadingElement | null>(null);
 
@@ -136,7 +87,6 @@ export function DashboardPage() {
 
         setNews(items);
         setNewsIndex(0);
-        setNewsImageIndex(0);
         setNewsError(items.length === 0);
       } catch {
         if (!cancelled) {
@@ -168,20 +118,9 @@ export function DashboardPage() {
     return () => window.clearInterval(interval);
   }, [news.length, pageActive]);
 
-  useEffect(() => {
-    setNewsImageIndex(0);
-  }, [newsIndex]);
-
   const featuredNews = news[newsIndex] ?? news[0];
 
-  const newsImageCandidates = useMemo(() => featuredNews ? getNewsImageCandidates(featuredNews) : [], [featuredNews]);
-
-  const currentNewsImage = newsImageCandidates[newsImageIndex];
-
-  useEffect(() => {
-    if (newsImageIndex < newsImageCandidates.length) return;
-    setNewsImageIndex(0);
-  }, [newsImageIndex, newsImageCandidates.length]);
+  const bannerImages = useMemo(() => featuredNews ? newsImageCandidates(featuredNews) : [], [featuredNews]);
 
   useEffect(() => {
     const titleElement = newsTitleRef.current;
@@ -374,35 +313,7 @@ export function DashboardPage() {
                   overflow: 'hidden',
                 }}
               >
-                {currentNewsImage ? (
-                  <div
-                    style={{
-                      width: '100%',
-                      aspectRatio: '16 / 7',
-                      maxWidth: '100%',
-                      overflow: 'hidden',
-                      lineHeight: 0,
-                      background: 'rgba(0, 0, 0, 0.25)',
-                    }}
-                  >
-                    <img
-                      src={currentNewsImage}
-                      alt=""
-                      aria-hidden="true"
-                      style={{
-                        display: 'block',
-                        width: '100%',
-                        height: '100%',
-                        maxWidth: '100%',
-                        objectFit: 'cover',
-                        objectPosition: 'center',
-                      }}
-                      onError={() => {
-                        setNewsImageIndex((current) => current + 1);
-                      }}
-                    />
-                  </div>
-                ) : null}
+                <NewsBannerImage key={featuredNews.url ?? featuredNews.id ?? newsIndex} candidates={bannerImages} />
 
                 <div
                   style={{

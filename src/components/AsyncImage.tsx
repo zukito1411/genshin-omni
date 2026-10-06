@@ -17,9 +17,11 @@ interface AsyncImageProps {
   fallback?: ReactNode;
   assetKey?: string;
   loading?: 'eager' | 'lazy';
+  onUnavailable?: () => void;
 }
 
-export const AsyncImage = memo(function AsyncImage({ src, alt, className, fallback, assetKey, loading = 'lazy' }: AsyncImageProps) {
+export const AsyncImage = memo(function AsyncImage({ src, alt, className, fallback, assetKey, loading = 'lazy', onUnavailable }: AsyncImageProps) {
+  const unavailable = useRef(onUnavailable); unavailable.current = onUnavailable;
   const sourceKey = [...new Set((Array.isArray(src) ? src : [src]).filter(Boolean))].join('|');
   const identity = assetKey || sourceKey;
   // Card, portrait, skin and icon caches must never overwrite one another.
@@ -56,7 +58,10 @@ export const AsyncImage = memo(function AsyncImage({ src, alt, className, fallba
         setResolved({ identity, source });
         return;
       }
-      if (!controller.signal.aborted) setResolved((previous) => previous?.identity === identity && candidates.includes(previous.source) ? previous : null);
+      if (!controller.signal.aborted) {
+        setResolved((previous) => previous?.identity === identity && candidates.includes(previous.source) ? previous : null);
+        if (candidates.length) unavailable.current?.();
+      }
     };
     void load();
     return () => controller.abort();

@@ -35,6 +35,7 @@ async function mock(page: Page, options: { available?: boolean; connected?: bool
     }
     if (method === 'DELETE') { connected = false; return route.fulfill({ json: { available: true, connected: false } }); }
     if (body.action === 'connect') { connected = true; return route.fulfill({ json: { available: true, connected: true, roles: [role], csrf: 'c'.repeat(43) } }); }
+    if (body.action === 'artwork') return route.fulfill({ json: { artwork: { uid: body.uid, avatar: 'UI_AvatarIcon_Ayaka_Circle.png', namecard: 'UI_NameCardPic_Ambor_P.jpg' } } });
     if (options.profileFailure) return route.fulfill({ status: 503, json: { code: 'unavailable', debug: 'do-not-display-internal-log' } });
     if (body.action === 'profile') return route.fulfill({ json: { profile: options.noNotes ? { ...profile, notes: null, unavailable: ['notes'] } : profile } });
     return route.fulfill({ json: { character: build } });
@@ -271,6 +272,84 @@ test('Paimon receives only public page context, never the connected profile or t
   expect(JSON.stringify(payload)).not.toContain(role.nickname);
   expect(JSON.stringify(payload)).not.toContain(role.uid);
   expect(Object.keys(payload).sort()).toEqual(['localTime', 'page', 'question']);
+});
+
+test('My Profile automatically displays the selected account avatar and namecard without another lookup or browser profile cache', async ({ page }) => {
+  const requests = await mock(page, { connected: true });
+  await page.goto('/me');
+  const banner = page.locator('.connected-profile-banner');
+  await expect(banner.locator('img.profile-avatar')).toHaveAttribute('src', /UI_AvatarIcon_Ayaka_Circle\.png$/);
+  await expect(banner.locator('img.profile-banner__background')).toHaveAttribute('src', /UI_NameCardPic_Ambor_P\.jpg$/);
+  await expect(page.locator('.connected-profile-daily')).toContainText('40 / 200');
+  await page.getByRole('searchbox', { name: 'Search owned characters', exact: true }).fill('Ayaka');
+  const artwork = requests.filter((request) => request.body?.action === 'artwork');
+  expect(artwork).toHaveLength(1);
+  expect(artwork[0].body).toEqual({ action: 'artwork', uid: role.uid });
+  expect(artwork[0].headers['x-teyvat-csrf']).toBe('c'.repeat(43));
+  for (const width of [320, 390, 768, 1366]) {
+    await page.setViewportSize({ width, height: 844 });
+    expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+    await expect(banner.getByRole('heading', { name: role.nickname, exact: true })).toBeVisible();
+  }
+  const stored = await page.evaluate(() => JSON.stringify({ ...localStorage, ...sessionStorage }));
+  expect(stored).not.toContain(role.uid);
+  expect(stored).not.toContain(role.nickname);
+  expect(stored).not.toContain('enka:uid');
+  await page.getByRole('button', { name: 'Disconnect', exact: true }).click();
+  await expect(banner).toHaveCount(0);
+});
+
+test('slow or failed optional artwork never blocks private stats and malformed artwork remains a safe fallback', async ({ page }) => {
+  await mock(page, { connected: true });
+  let release: (() => void) | undefined;
+  let started = false;
+  await page.route('**/api/my-profile', async (route) => {
+    const input = route.request().postData() ? route.request().postDataJSON() : undefined;
+    if (input?.action !== 'artwork') return route.fallback();
+    started = true; await new Promise<void>((resolve) => { release = resolve; });
+    return route.fulfill({ status: 503, json: { code: 'artwork_unavailable', debug: 'private-artwork-diagnostic' } }).catch(() => undefined);
+  });
+  await page.goto('/me');
+  await expect(page.getByRole('heading', { name: role.nickname, exact: true })).toBeVisible();
+  await expect(page.locator('.connected-profile-daily')).toContainText('40 / 200');
+  await expect.poll(() => started).toBe(true);
+  release?.();
+  await expect(page.getByRole('button', { name: 'Retry artwork' })).toBeVisible();
+  await expect(page.locator('main')).not.toContainText('private-artwork-diagnostic');
+  await page.route('**/api/my-profile', (route) => route.request().postDataJSON()?.action === 'artwork' ? route.fulfill({ json: { artwork: { uid: role.uid, avatar: { unsafe: true }, namecard: [] } } }) : route.fallback());
+  await page.getByRole('button', { name: 'Retry artwork' }).click();
+  await expect(page.getByRole('button', { name: 'Retry artwork' })).toBeVisible();
+  await expect(page.locator('.connected-profile-banner img.profile-avatar')).toHaveCount(0);
+  await expect(page.locator('.connected-profile-daily')).toContainText('40 / 200');
+});
+
+test('account switching cancels stale artwork and image-host failures keep the private profile usable', async ({ page }) => {
+  await mock(page, { connected: true });
+  const otherRole = { ...role, uid: '800000002', nickname: 'Second Traveler' };
+  let release: (() => void) | undefined;
+  let started = false;
+  let blockedArtwork = false;
+  await page.route('**/api/my-profile', async (route) => {
+    if (route.request().method() === 'GET') return route.fulfill({ json: { available: true, connected: true, roles: [role, otherRole], csrf: 'c'.repeat(43) } });
+    const input = route.request().postDataJSON();
+    if (input.action === 'profile') return route.fulfill({ json: { profile: { ...profile, role: input.uid === role.uid ? role : otherRole } } });
+    if (input.action !== 'artwork') return route.fallback();
+    if (input.uid === role.uid) { started = true; await new Promise<void>((resolve) => { release = resolve; }); }
+    return route.fulfill({ json: { artwork: { uid: input.uid, avatar: input.uid === role.uid ? 'UI_AvatarIcon_Old.png' : blockedArtwork ? 'UI_AvatarIcon_Blocked.png' : 'UI_AvatarIcon_New.png', namecard: input.uid === role.uid ? 'UI_NameCardPic_Old_P.jpg' : blockedArtwork ? 'UI_NameCardPic_Blocked_P.jpg' : 'UI_NameCardPic_New_P.jpg' } } }).catch(() => undefined);
+  });
+  await page.goto('/me');
+  await expect.poll(() => started).toBe(true);
+  await page.getByRole('combobox', { name: 'Your Genshin account' }).selectOption(otherRole.uid);
+  await expect(page.getByRole('heading', { name: otherRole.nickname, exact: true })).toBeVisible();
+  release?.();
+  await expect(page.locator('.connected-profile-banner img.profile-avatar')).toHaveAttribute('src', /UI_AvatarIcon_New\.png$/);
+  await expect(page.locator('.connected-profile-banner img.profile-banner__background')).toHaveAttribute('src', /UI_NameCardPic_New_P\.jpg$/);
+  await expect(page.locator('.connected-profile-banner')).not.toContainText(role.nickname);
+  blockedArtwork = true;
+  await page.route('**/*', (route) => route.request().resourceType() === 'image' && !route.request().url().startsWith('http://127.0.0.1:4173') ? route.fulfill({ status: 404 }) : route.fallback());
+  await page.getByRole('button', { name: 'Refresh', exact: true }).click();
+  await expect(page.getByRole('button', { name: 'Retry artwork' })).toBeVisible();
+  await expect(page.locator('.connected-profile-daily')).toContainText('40 / 200');
 });
 
 test('production security policy permits the private page and blocks third-party scripts', async ({ page }) => {

@@ -50,6 +50,7 @@
 .connected-profile-toolbar > div { display: flex; gap: 10px; flex-wrap: wrap; }
 .connected-profile-banner { margin-top: 20px; }
 .connected-profile-banner .profile-avatar-frame { display: grid; place-items: center; color: var(--gold); }
+.connected-profile-banner .profile-avatar.image-fallback { display: grid; place-items: center; }
 .connected-profile-updated { display: flex; gap: 8px; align-items: center; line-height: 1.5; }
 .connected-profile-daily { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 14px; }
 .connected-profile-daily > article { min-width: 0; padding: 20px; overflow-wrap: anywhere; }

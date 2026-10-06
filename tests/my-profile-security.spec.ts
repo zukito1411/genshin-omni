@@ -10,7 +10,7 @@ const env = { HOYOLAB_ENABLED: 'true', HOYOLAB_ENCRYPTION_KEY: key, HOYOLAB_APP_
 const token = 'test-session-token-for-fixtures-only';
 const role = { uid: '800000001', nickname: 'Private Traveler', region: 'os_asia', server: 'Asia', level: 60 };
 const profile = { role, characters: [{ id: 10000002, name: 'Kamisato Ayaka' }], updatedAt: 1 };
-function setup(customProvider?: object) {
+function setup(customProvider?: object, artworkProvider?: object) {
   const records = new Map();
   const metadata = new Map();
   const store = {
@@ -22,7 +22,7 @@ function setup(customProvider?: object) {
   let clock = Date.now();
   let calls = 0;
   const provider = customProvider ?? { roles: async () => [role], profile: async () => { calls++; return profile; }, character: async () => ({ name: 'Kamisato Ayaka' }) };
-  const handler = createProfileHandler({ storeFactory: () => store, env, provider, now: () => clock });
+  const handler = createProfileHandler({ storeFactory: () => store, env, provider, ...(artworkProvider ? { artworkProvider } : {}), now: () => clock });
   const request = (method: string, payload?: object, cookie?: string, csrf?: string, extra = {}) => new Request(`${origin}/api/my-profile`, { method, headers: { Origin: origin, 'Content-Type': 'application/json', 'X-Teyvat-Client': 'profile', ...(cookie ? { Cookie: cookie } : {}), ...(csrf ? { 'X-Teyvat-CSRF': csrf } : {}), ...extra }, ...(payload ? { body: JSON.stringify(payload) } : {}) });
   async function connect() {
     const response = await handler(request('POST', { action: 'connect', accountId: '12345', token, version: 'v2', consent: true }), { ip: 'test-client' });
@@ -187,4 +187,34 @@ test('provider requests are fixed-host, ownership-based, bounded and never auto-
   expect(calls.some((call) => call.url.includes('changeDataSwitch'))).toBe(false);
   const challenge = createHoyolabProvider(async () => Response.json({ retcode: 1034, data: null }));
   await expect(challenge.roles(credentials)).rejects.toBeInstanceOf(ConnectionError);
+});
+
+test('connected artwork requires the same ownership and CSRF checks without reading or forwarding private profile data', async () => {
+  const calls: string[] = [];
+  const api = setup(undefined, { get: async (...args: string[]) => { calls.push(...args); return { uid: args[0], avatar: 'UI_AvatarIcon_Ayaka.png', namecard: 'UI_NameCardPic_Ambor_P.jpg' }; } });
+  const connected = await api.connect();
+  for (const request of [api.request('POST', { action: 'artwork', uid: role.uid }, connected.cookie), api.request('POST', { action: 'artwork', uid: '800000999' }, connected.cookie, connected.csrf), api.request('POST', { action: 'artwork', uid: role.uid, url: 'https://evil.test' }, connected.cookie, connected.csrf)]) expect([400, 403]).toContain((await api.handler(request)).status);
+  expect(calls).toEqual([]);
+  const response = await api.handler(api.request('POST', { action: 'artwork', uid: role.uid }, connected.cookie, connected.csrf));
+  expect(response.status).toBe(200);
+  expect(response.headers.get('cache-control')).toContain('no-store');
+  expect(calls).toEqual([role.uid]);
+  expect(api.callCount()).toBe(0);
+  const body = await response.json();
+  expect(Object.keys(body.artwork).sort()).toEqual(['avatar', 'namecard', 'uid']);
+  expect(JSON.stringify(body)).not.toContain(token);
+});
+
+test('late artwork replies cannot revive a disconnected profile', async () => {
+  let release: ((value: object) => void) | undefined;
+  let start: (() => void) | undefined;
+  const called = new Promise<void>((resolve) => { start = resolve; });
+  const pending = new Promise<object>((resolve) => { release = resolve; });
+  const api = setup(undefined, { get: async () => { start?.(); return pending; } });
+  const connected = await api.connect();
+  const response = api.handler(api.request('POST', { action: 'artwork', uid: role.uid }, connected.cookie, connected.csrf));
+  await called;
+  await api.handler(api.request('DELETE', undefined, connected.cookie, connected.csrf));
+  release?.({ uid: role.uid, avatar: 'UI_AvatarIcon_Ayaka.png', namecard: 'UI_NameCardPic_Ambor_P.jpg' });
+  expect((await response).status).toBe(401);
 });

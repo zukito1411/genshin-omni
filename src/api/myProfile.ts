@@ -12,6 +12,7 @@ const messages: Record<string, string> = {
   forbidden: 'This account or character is not available through your current connection.',
   rate_limited: 'Please wait a moment before refreshing again.',
   character_unavailable: 'This character’s equipped details are unavailable. Your other profile information is still here.',
+  artwork_unavailable: 'Profile artwork is temporarily unavailable. Your account details are still available.',
   already_connected: 'Disconnect the current account before connecting another one.',
   unavailable: 'HoYoLAB could not be reached. Please try again later.',
   invalid_login: 'Please enter your HoYoverse email or username and password.',

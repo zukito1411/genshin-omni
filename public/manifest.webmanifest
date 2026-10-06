@@ -1,0 +1,18 @@
+{
+  "id": "/",
+  "name": "Teyvat Atlas",
+  "short_name": "Teyvat Atlas",
+  "description": "Your Genshin Impact player companion.",
+  "lang": "en",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "background_color": "#07111c",
+  "theme_color": "#07111c",
+  "prefer_related_applications": false,
+  "icons": [
+    { "src": "/assets/app-icon-192-v1.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },
+    { "src": "/assets/app-icon-512-v1.png", "sizes": "512x512", "type": "image/png", "purpose": "any" },
+    { "src": "/assets/app-icon-maskable-512-v1.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
+  ]
+}
